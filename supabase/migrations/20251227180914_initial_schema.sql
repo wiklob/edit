@@ -1,0 +1,2 @@
+-- Already applied, this migration is for tracking purposes only
+-- See git history for actual schema
