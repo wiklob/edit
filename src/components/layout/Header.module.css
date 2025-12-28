@@ -1,4 +1,7 @@
 .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: var(--spacing-lg) var(--spacing-xl);
   border-bottom: 1px solid var(--color-border);
 }
@@ -6,4 +9,10 @@
 .title {
   font-size: var(--font-size-lg);
   font-weight: 500;
+}
+
+.rightContent {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }

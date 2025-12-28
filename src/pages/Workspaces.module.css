@@ -153,3 +153,9 @@
   color: #c00;
   margin-bottom: var(--spacing-md);
 }
+
+.success {
+  font-size: var(--font-size-sm);
+  color: #080;
+  margin-bottom: var(--spacing-md);
+}

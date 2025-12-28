@@ -15,6 +15,8 @@
 -- users
 drop policy if exists "Users can read all users" on public.users;
 drop policy if exists "Users can update own profile" on public.users;
+drop policy if exists "users_select" on public.users;
+drop policy if exists "users_update" on public.users;
 
 -- workspaces
 drop policy if exists "workspaces_select" on public.workspaces;

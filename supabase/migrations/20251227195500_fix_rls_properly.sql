@@ -11,8 +11,8 @@
 -- ============================================================================
 
 -- Drop the SECURITY DEFINER RPC function and old trigger function
-DROP FUNCTION IF EXISTS public.create_workspace(text, text);
-DROP FUNCTION IF EXISTS public.handle_new_workspace();
+DROP FUNCTION IF EXISTS public.create_workspace(text, text) CASCADE;
+DROP FUNCTION IF EXISTS public.handle_new_workspace() CASCADE;
 
 -- ============================================================================
 -- Add owner_id to workspaces (breaks the circular dependency)

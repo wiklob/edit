@@ -1,8 +1,13 @@
--- Add slug column to workspaces
-alter table public.workspaces add column slug text unique;
+-- Add slug column to workspaces (idempotent)
+ALTER TABLE public.workspaces ADD COLUMN IF NOT EXISTS slug TEXT;
 
--- Make slug required for new rows
-alter table public.workspaces alter column slug set not null;
+-- Add unique constraint if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_slug_key') THEN
+    ALTER TABLE public.workspaces ADD CONSTRAINT workspaces_slug_key UNIQUE (slug);
+  END IF;
+END $$;
 
 -- Index for fast slug lookups
-create index idx_workspaces_slug on public.workspaces(slug);
+CREATE INDEX IF NOT EXISTS idx_workspaces_slug ON public.workspaces(slug);

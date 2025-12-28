@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../lib';
+import { supabase } from '../lib/supabase';
 import styles from './Workspaces.module.css';
 
 export function Workspaces() {
   const navigate = useNavigate();
   const { workspaces, createWorkspace, setCurrentWorkspace } = useWorkspace();
-  const [mode, setMode] = useState<'select' | 'create'>('select');
+  const [mode, setMode] = useState<'select' | 'create' | 'join'>('select');
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
+  const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState(false);
 
   const handleSelectWorkspace = (workspace: typeof workspaces[0]) => {
     setCurrentWorkspace(workspace);
@@ -58,6 +62,43 @@ export function Workspaces() {
     }
   };
 
+  const handleJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    const code = joinCode.replace(/\D/g, '');
+    if (code.length !== 7) {
+      setError('Please enter a valid 7-digit join code');
+      return;
+    }
+
+    setJoining(true);
+    const { error: joinError } = await supabase.rpc('request_to_join', {
+      p_join_code: code,
+    });
+    setJoining(false);
+
+    if (joinError) {
+      if (joinError.message.includes('already a member')) {
+        setError('You are already a member of this workspace');
+      } else if (joinError.message.includes('already requested')) {
+        setError('You have already requested to join this workspace');
+      } else if (joinError.message.includes('Invalid join code')) {
+        setError('Invalid join code');
+      } else {
+        setError(joinError.message || 'Failed to submit join request');
+      }
+    } else {
+      setSuccess('Request submitted! The workspace owner will review your request.');
+      setJoinCode('');
+    }
+  };
+
+  const formatJoinCode = (value: string) => {
+    return value.replace(/\D/g, '').slice(0, 7);
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.card}>
@@ -85,11 +126,49 @@ export function Workspaces() {
               <button onClick={() => setMode('create')} className={styles.button}>
                 Create workspace
               </button>
-              <button className={styles.buttonSecondary} disabled>
+              <button onClick={() => setMode('join')} className={styles.buttonSecondary}>
                 Join workspace
               </button>
             </div>
           </>
+        )}
+
+        {mode === 'join' && (
+          <form onSubmit={handleJoin} className={styles.form}>
+            <div className={styles.field}>
+              <label className={styles.label}>Join code</label>
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(formatJoinCode(e.target.value))}
+                placeholder="1234567"
+                className={styles.input}
+                autoFocus
+              />
+              <span className={styles.hint}>Enter the 7-digit code from the workspace owner</span>
+            </div>
+
+            {error && <p className={styles.error}>{error}</p>}
+            {success && <p className={styles.success}>{success}</p>}
+
+            <div className={styles.actions}>
+              <button type="submit" className={styles.button} disabled={joining}>
+                {joining ? 'Submitting...' : 'Request to join'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('select');
+                  setError('');
+                  setSuccess('');
+                  setJoinCode('');
+                }}
+                className={styles.buttonSecondary}
+              >
+                Back
+              </button>
+            </div>
+          </form>
         )}
 
         {mode === 'create' && (

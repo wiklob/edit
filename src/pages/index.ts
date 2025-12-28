@@ -1,7 +1,9 @@
-export { Dashboard } from './Dashboard';
-export { Articles } from './Articles';
-export { Pipeline } from './Pipeline';
-export { Calendar } from './Calendar';
+export { Home } from './Home';
 export { Settings } from './Settings';
+export { WorkspaceSettings } from './WorkspaceSettings';
+export { Section } from './Section';
+export { Page } from './Page';
+export { DatabasePage } from './DatabasePage';
+export { TextPage } from './TextPage';
 export { Login } from './Login';
 export { Workspaces } from './Workspaces';

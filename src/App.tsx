@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider, WorkspaceProvider } from './lib';
 import { Layout } from './components/layout';
 import { ProtectedRoute, RequireWorkspace } from './components/common';
-import { Dashboard, Articles, Pipeline, Calendar, Settings, Login, Workspaces } from './pages';
+import { Home, Settings, WorkspaceSettings, Section, Page, Login, Workspaces } from './pages';
 
 function App() {
   return (
@@ -29,10 +29,10 @@ function App() {
                 </ProtectedRoute>
               }
             >
-              <Route index element={<Dashboard />} />
-              <Route path="articles" element={<Articles />} />
-              <Route path="pipeline" element={<Pipeline />} />
-              <Route path="calendar" element={<Calendar />} />
+              <Route index element={<Home />} />
+              <Route path="section/:id" element={<Section />} />
+              <Route path="section/:id/page/:pageId" element={<Page />} />
+              <Route path="workspace-settings" element={<WorkspaceSettings />} />
               <Route path="settings" element={<Settings />} />
             </Route>
           </Routes>
