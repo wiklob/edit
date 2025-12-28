@@ -269,11 +269,11 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
   IF NEW.type = 'database' AND NEW.database_type = 'articles' THEN
+    -- Note: Title is not a column - it uses pages.name directly
     INSERT INTO public.database_columns (page_id, name, property_type, display_order)
     VALUES
-      (NEW.id, 'Title', 'text', 0),
-      (NEW.id, 'Author', 'text', 1),
-      (NEW.id, 'Publication Date', 'text', 2);
+      (NEW.id, 'Author', 'text', 0),
+      (NEW.id, 'Publication Date', 'text', 1);
   END IF;
   RETURN NEW;
 END;

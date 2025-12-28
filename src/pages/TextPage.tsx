@@ -17,6 +17,8 @@ export function TextPage({ page, onUpdate }: TextPageProps) {
   const [editName, setEditName] = useState(page.name);
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [editPropertyValue, setEditPropertyValue] = useState('');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState(page.name);
 
   useEffect(() => {
     const fetchProperties = async () => {
@@ -29,7 +31,10 @@ export function TextPage({ page, onUpdate }: TextPageProps) {
           .order('column(display_order)');
 
         if (data) {
-          setProperties(data as unknown as PagePropertyWithColumn[]);
+          // Filter out Title column - we handle it separately using pages.name
+          const filtered = (data as unknown as PagePropertyWithColumn[])
+            .filter(p => p.column.name !== 'Title');
+          setProperties(filtered);
         }
       }
       setLoading(false);
@@ -40,13 +45,15 @@ export function TextPage({ page, onUpdate }: TextPageProps) {
 
   const handleNameSave = async () => {
     if (editName.trim() && editName !== page.name) {
+      const newName = editName.trim();
+
       const { error } = await supabase
         .from('pages')
-        .update({ name: editName.trim() })
+        .update({ name: newName })
         .eq('id', page.id);
 
       if (!error) {
-        onUpdate({ ...page, name: editName.trim() });
+        onUpdate({ ...page, name: newName });
       }
     }
     setIsEditingName(false);
@@ -88,8 +95,8 @@ export function TextPage({ page, onUpdate }: TextPageProps) {
       .eq('id', editingPropertyId);
 
     if (!error) {
-      setProperties(properties.map(prop =>
-        prop.id === editingPropertyId ? { ...prop, value: editPropertyValue } : prop
+      setProperties(properties.map(p =>
+        p.id === editingPropertyId ? { ...p, value: editPropertyValue } : p
       ));
     }
     setEditingPropertyId(null);
@@ -100,6 +107,35 @@ export function TextPage({ page, onUpdate }: TextPageProps) {
       handleSaveProperty();
     } else if (e.key === 'Escape') {
       setEditingPropertyId(null);
+    }
+  };
+
+  const handleStartEditTitle = () => {
+    setIsEditingTitle(true);
+    setEditTitleValue(page.name);
+  };
+
+  const handleSaveTitle = async () => {
+    if (editTitleValue.trim() && editTitleValue.trim() !== page.name) {
+      const newName = editTitleValue.trim();
+      const { error } = await supabase
+        .from('pages')
+        .update({ name: newName })
+        .eq('id', page.id);
+
+      if (!error) {
+        onUpdate({ ...page, name: newName });
+        setEditName(newName);
+      }
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveTitle();
+    } else if (e.key === 'Escape') {
+      setIsEditingTitle(false);
     }
   };
 
@@ -131,8 +167,31 @@ export function TextPage({ page, onUpdate }: TextPageProps) {
     <div>
       <Header title={headerContent} />
       <div className={styles.content}>
-        {properties.length > 0 && (
+        {page.parent_id && (
           <div className={styles.propertiesSection}>
+            {/* Title property - uses pages.name directly */}
+            <div className={styles.propertyRow}>
+              <label className={styles.propertyLabel}>Title</label>
+              {isEditingTitle ? (
+                <input
+                  type="text"
+                  value={editTitleValue}
+                  onChange={(e) => setEditTitleValue(e.target.value)}
+                  onBlur={handleSaveTitle}
+                  onKeyDown={handleTitleKeyDown}
+                  className={styles.propertyInput}
+                  autoFocus
+                />
+              ) : (
+                <span
+                  className={styles.propertyValue}
+                  onClick={handleStartEditTitle}
+                >
+                  {page.name}
+                </span>
+              )}
+            </div>
+            {/* Other properties from database columns */}
             {properties.map((prop) => (
               <div key={prop.id} className={styles.propertyRow}>
                 <label className={styles.propertyLabel}>{prop.column.name}</label>

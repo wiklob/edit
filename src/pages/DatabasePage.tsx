@@ -144,15 +144,35 @@ export function DatabasePage({ page, onUpdate }: DatabasePageProps) {
 
   const handleSaveRowTitle = async (rowId: string) => {
     if (editRowTitleValue.trim()) {
+      const newName = editRowTitleValue.trim();
+
+      // Update page name
       const { error } = await supabase
         .from('pages')
-        .update({ name: editRowTitleValue.trim() })
+        .update({ name: newName })
         .eq('id', rowId);
 
       if (!error) {
-        setRows(rows.map(row =>
-          row.id === rowId ? { ...row, name: editRowTitleValue.trim() } : row
-        ));
+        // Also update the Title property to keep them in sync
+        const titleColumn = columns.find(c => c.name === 'Title');
+        if (titleColumn) {
+          await supabase
+            .from('page_properties')
+            .update({ value: newName })
+            .eq('page_id', rowId)
+            .eq('column_id', titleColumn.id);
+        }
+
+        setRows(rows.map(row => {
+          if (row.id !== rowId) return row;
+          return {
+            ...row,
+            name: newName,
+            properties: row.properties.map(prop =>
+              prop.column?.name === 'Title' ? { ...prop, value: newName } : prop
+            ),
+          };
+        }));
       }
     }
     setEditingRowTitle(null);
