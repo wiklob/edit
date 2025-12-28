@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../../lib/supabase';
+import { IconPicker } from '../common';
+import { supabase, useSidebar, useBreadcrumbs } from '../../lib';
 import type { Section, SectionAccessWithMember, WorkspaceMemberWithUser } from '../../types';
 import styles from './SectionSettingsModal.module.css';
 
@@ -19,9 +20,50 @@ interface MemberDisplay {
 }
 
 export function SectionSettingsModal({ section, initialTab = 'general', onClose }: SectionSettingsModalProps) {
+  const { updateSectionIcon } = useSidebar();
+  const { breadcrumbs, setBreadcrumbs } = useBreadcrumbs();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [sectionIcon, setSectionIcon] = useState(section.icon);
   const [members, setMembers] = useState<MemberDisplay[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const handleIconChange = async (newIcon: string) => {
+    const { error } = await supabase
+      .from('sections')
+      .update({ icon: newIcon })
+      .eq('id', section.id);
+
+    if (!error) {
+      setSectionIcon(newIcon);
+      updateSectionIcon(section.id, newIcon);
+      // Update breadcrumbs if this section is in the current path
+      const sectionIndex = breadcrumbs.findIndex(b => b.to?.includes(`/section/${section.id}`));
+      if (sectionIndex !== -1) {
+        const updated = [...breadcrumbs];
+        updated[sectionIndex] = { ...updated[sectionIndex], icon: newIcon };
+        setBreadcrumbs(updated);
+      }
+    }
+  };
+
+  const handleRemoveIcon = async () => {
+    const { error } = await supabase
+      .from('sections')
+      .update({ icon: null })
+      .eq('id', section.id);
+
+    if (!error) {
+      setSectionIcon(null);
+      updateSectionIcon(section.id, null);
+      // Update breadcrumbs if this section is in the current path
+      const sectionIndex = breadcrumbs.findIndex(b => b.to?.includes(`/section/${section.id}`));
+      if (sectionIndex !== -1) {
+        const updated = [...breadcrumbs];
+        updated[sectionIndex] = { ...updated[sectionIndex], icon: null };
+        setBreadcrumbs(updated);
+      }
+    }
+  };
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -123,7 +165,19 @@ export function SectionSettingsModal({ section, initialTab = 'general', onClose 
 
           <div className={styles.content}>
             {activeTab === 'general' && (
-              <div className={styles.placeholder}>General settings coming soon</div>
+              <div className={styles.generalSettings}>
+                <div className={styles.settingRow}>
+                  <label className={styles.settingLabel}>Icon</label>
+                  <div className={styles.settingValue}>
+                    <IconPicker
+                      icon={sectionIcon}
+                      onSelect={handleIconChange}
+                      onRemove={sectionIcon ? handleRemoveIcon : undefined}
+                      size="small"
+                    />
+                  </div>
+                </div>
+              </div>
             )}
             {activeTab === 'members' && (
               <div className={styles.membersList}>

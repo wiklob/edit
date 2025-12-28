@@ -1,22 +1,25 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Header } from '../components/layout';
-import { supabase } from '../lib/supabase';
+import { IconPicker, PageIcon } from '../components/common';
+import { supabase, useBreadcrumbs, useSidebar } from '../lib';
 import type { Page, DatabaseColumn, PageWithProperties } from '../types';
 import styles from './Page.module.css';
 
 interface DatabasePageProps {
   page: Page;
-  onUpdate: (page: Page) => void;
 }
 
-export function DatabasePage({ page, onUpdate }: DatabasePageProps) {
+export function DatabasePage({ page }: DatabasePageProps) {
   const { id: sectionId } = useParams<{ id: string }>();
+  const { breadcrumbs, setBreadcrumbs } = useBreadcrumbs();
+  const { updatePageIcon } = useSidebar();
+  const [pageIcon, setPageIcon] = useState(page.icon);
+  const [pageName, setPageName] = useState(page.name);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState(page.name);
   const [columns, setColumns] = useState<DatabaseColumn[]>([]);
   const [rows, setRows] = useState<PageWithProperties[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [editName, setEditName] = useState(page.name);
   const [editingRowTitle, setEditingRowTitle] = useState<string | null>(null);
   const [editRowTitleValue, setEditRowTitleValue] = useState('');
   const [editingProperty, setEditingProperty] = useState<{ rowId: string; columnId: string } | null>(null);
@@ -52,26 +55,73 @@ export function DatabasePage({ page, onUpdate }: DatabasePageProps) {
     fetchData();
   }, [page.id]);
 
-  const handleNameSave = async () => {
-    if (editName.trim() && editName !== page.name) {
+  const handleStartEditTitle = () => {
+    setIsEditingTitle(true);
+    setEditTitleValue(pageName);
+  };
+
+  const handleSaveTitle = async () => {
+    const newName = editTitleValue.trim();
+    if (newName && newName !== pageName) {
       const { error } = await supabase
         .from('pages')
-        .update({ name: editName.trim() })
+        .update({ name: newName })
         .eq('id', page.id);
 
       if (!error) {
-        onUpdate({ ...page, name: editName.trim() });
+        setPageName(newName);
+        // Update breadcrumbs
+        const updated = [...breadcrumbs];
+        if (updated.length > 0) {
+          updated[updated.length - 1] = { ...updated[updated.length - 1], label: newName };
+        }
+        setBreadcrumbs(updated);
       }
     }
-    setIsEditingName(false);
+    setIsEditingTitle(false);
   };
 
-  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      handleNameSave();
+      handleSaveTitle();
     } else if (e.key === 'Escape') {
-      setEditName(page.name);
-      setIsEditingName(false);
+      setIsEditingTitle(false);
+    }
+  };
+
+  const handleIconChange = async (newIcon: string) => {
+    const { error } = await supabase
+      .from('pages')
+      .update({ icon: newIcon })
+      .eq('id', page.id);
+
+    if (!error) {
+      setPageIcon(newIcon);
+      updatePageIcon(page.id, newIcon);
+      // Update breadcrumbs
+      const updated = [...breadcrumbs];
+      if (updated.length > 0) {
+        updated[updated.length - 1] = { ...updated[updated.length - 1], icon: newIcon };
+      }
+      setBreadcrumbs(updated);
+    }
+  };
+
+  const handleRemoveIcon = async () => {
+    const { error } = await supabase
+      .from('pages')
+      .update({ icon: null })
+      .eq('id', page.id);
+
+    if (!error) {
+      setPageIcon(null);
+      updatePageIcon(page.id, null);
+      // Update breadcrumbs
+      const updated = [...breadcrumbs];
+      if (updated.length > 0) {
+        updated[updated.length - 1] = { ...updated[updated.length - 1], icon: null };
+      }
+      setBreadcrumbs(updated);
     }
   };
 
@@ -186,107 +236,109 @@ export function DatabasePage({ page, onUpdate }: DatabasePageProps) {
     }
   };
 
-  const headerContent = isEditingName ? (
-    <input
-      type="text"
-      value={editName}
-      onChange={(e) => setEditName(e.target.value)}
-      onBlur={handleNameSave}
-      onKeyDown={handleNameKeyDown}
-      className={styles.nameInput}
-      autoFocus
-    />
-  ) : (
-    <span onClick={() => setIsEditingName(true)} className={styles.editableName}>
-      {page.name}
-    </span>
-  );
-
   return (
-    <div>
-      <Header title={headerContent} />
-      <div className={styles.content}>
-        {loading ? (
-          <div className={styles.loading}>Loading...</div>
+    <div className={styles.content}>
+      <div className={styles.titleRow}>
+        <IconPicker icon={pageIcon} onSelect={handleIconChange} onRemove={pageIcon ? handleRemoveIcon : undefined} size="small" />
+        {isEditingTitle ? (
+          <input
+            type="text"
+            value={editTitleValue}
+            onChange={(e) => setEditTitleValue(e.target.value)}
+            onBlur={handleSaveTitle}
+            onKeyDown={handleTitleKeyDown}
+            className={styles.pageTitleInput}
+            autoFocus
+          />
         ) : (
-          <>
-            <div className={styles.tableWrapper}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th className={styles.titleColumn}>Title</th>
-                    {columns.filter(c => c.name !== 'Title').map((column) => (
-                      <th key={column.id}>{column.name}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id}>
-                      <td className={styles.titleCell}>
-                        <div className={styles.titleWrapper}>
-                          {editingRowTitle === row.id ? (
+          <h1 className={styles.pageTitle} onClick={handleStartEditTitle}>
+            {pageName}
+          </h1>
+        )}
+      </div>
+      {loading ? (
+        <div className={styles.loading}>Loading...</div>
+      ) : (
+        <>
+          <div className={styles.tableWrapper}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th className={styles.titleColumn}>Title</th>
+                  {columns.filter(c => c.name !== 'Title').map((column) => (
+                    <th key={column.id}>{column.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id}>
+                    <td className={styles.titleCell}>
+                      <div className={styles.titleWrapper}>
+                        <span className={styles.rowIcon}>
+                          <PageIcon icon={row.icon || 'lucide:file-text:default'} size={14} />
+                        </span>
+                        {editingRowTitle === row.id ? (
+                          <input
+                            type="text"
+                            value={editRowTitleValue}
+                            onChange={(e) => setEditRowTitleValue(e.target.value)}
+                            onBlur={() => handleSaveRowTitle(row.id)}
+                            onKeyDown={(e) => handleRowTitleKeyDown(e, row.id)}
+                            className={styles.titleInput}
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className={styles.titleText}
+                            onClick={() => handleStartEditRowTitle(row)}
+                          >
+                            {row.name}
+                          </span>
+                        )}
+                        <Link
+                          to={`/section/${sectionId}/page/${row.id}`}
+                          className={styles.openBtn}
+                        >
+                          Open
+                        </Link>
+                      </div>
+                    </td>
+                    {columns.filter(c => c.name !== 'Title').map((column) => {
+                      const isEditing = editingProperty?.rowId === row.id && editingProperty?.columnId === column.id;
+                      return (
+                        <td key={column.id}>
+                          {isEditing ? (
                             <input
                               type="text"
-                              value={editRowTitleValue}
-                              onChange={(e) => setEditRowTitleValue(e.target.value)}
-                              onBlur={() => handleSaveRowTitle(row.id)}
-                              onKeyDown={(e) => handleRowTitleKeyDown(e, row.id)}
-                              className={styles.titleInput}
+                              value={editPropertyValue}
+                              onChange={(e) => setEditPropertyValue(e.target.value)}
+                              onBlur={handleSaveProperty}
+                              onKeyDown={handlePropertyKeyDown}
+                              className={styles.cellInput}
                               autoFocus
                             />
                           ) : (
                             <span
-                              className={styles.titleText}
-                              onClick={() => handleStartEditRowTitle(row)}
+                              className={styles.cellText}
+                              onClick={() => handleStartEditProperty(row.id, column.id)}
                             >
-                              {row.name}
+                              {getPropertyValue(row, column.id) || '—'}
                             </span>
                           )}
-                          <Link
-                            to={`/section/${sectionId}/page/${row.id}`}
-                            className={styles.openBtn}
-                          >
-                            Open
-                          </Link>
-                        </div>
-                      </td>
-                      {columns.filter(c => c.name !== 'Title').map((column) => {
-                        const isEditing = editingProperty?.rowId === row.id && editingProperty?.columnId === column.id;
-                        return (
-                          <td key={column.id}>
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editPropertyValue}
-                                onChange={(e) => setEditPropertyValue(e.target.value)}
-                                onBlur={handleSaveProperty}
-                                onKeyDown={handlePropertyKeyDown}
-                                className={styles.cellInput}
-                                autoFocus
-                              />
-                            ) : (
-                              <span
-                                className={styles.cellText}
-                                onClick={() => handleStartEditProperty(row.id, column.id)}
-                              >
-                                {getPropertyValue(row, column.id) || '—'}
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <button onClick={handleAddRow} className={styles.addRowBtn}>
-              + New row
-            </button>
-          </>
-        )}
-      </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button onClick={handleAddRow} className={styles.addRowBtn}>
+            + New row
+          </button>
+        </>
+      )}
     </div>
   );
 }

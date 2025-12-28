@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { Workspace, WorkspaceWithRole, WorkspaceRole } from '../types';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
@@ -17,16 +17,21 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 const WORKSPACE_STORAGE_KEY = 'edit:current-workspace-id';
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [workspaces, setWorkspaces] = useState<WorkspaceWithRole[]>([]);
   const [currentWorkspace, setCurrentWorkspaceState] = useState<WorkspaceWithRole | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [workspacesLoading, setWorkspacesLoading] = useState(true);
 
-  const fetchWorkspaces = async () => {
+  // Loading is true until both auth and workspaces are loaded
+  const loading = authLoading || workspacesLoading;
+
+  const fetchWorkspaces = useCallback(async () => {
+    if (authLoading) return; // Wait for auth to complete
+
     if (!user) {
       setWorkspaces([]);
       setCurrentWorkspaceState(null);
-      setLoading(false);
+      setWorkspacesLoading(false);
       return;
     }
 
@@ -41,7 +46,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       console.error('Failed to fetch workspaces:', error);
-      setLoading(false);
+      setWorkspacesLoading(false);
       return;
     }
 
@@ -60,12 +65,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const stored = storedId ? workspacesWithRole.find((w) => w.id === storedId) : null;
     setCurrentWorkspaceState(stored || workspacesWithRole[0] || null);
 
-    setLoading(false);
-  };
+    setWorkspacesLoading(false);
+  }, [user, authLoading]);
 
   useEffect(() => {
     fetchWorkspaces();
-  }, [user]);
+  }, [fetchWorkspaces]);
 
   const setCurrentWorkspace = (workspace: WorkspaceWithRole | null) => {
     setCurrentWorkspaceState(workspace);

@@ -112,3 +112,27 @@
   background: var(--color-bg-secondary);
   border-radius: var(--radius-sm);
 }
+
+/* General settings */
+.generalSettings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.settingRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+}
+
+.settingLabel {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.settingValue {
+  flex: 1;
+}

@@ -102,7 +102,7 @@ export function Workspaces() {
   return (
     <div className={styles.container}>
       <div className={styles.card}>
-        <img src="/e.png" alt="" className={styles.logo} />
+        <img src="/e5.png" alt="" className={styles.logo} />
         <h1 className={styles.title}>Workspaces</h1>
 
         {mode === 'select' && (

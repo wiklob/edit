@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth, useWorkspace } from '../../lib';
+import { PageIcon } from '../common';
+import { useAuth, useWorkspace, useSidebar } from '../../lib';
 import { supabase } from '../../lib/supabase';
 import { SectionSettingsModal } from '../modals';
 import type { Section } from '../../types';
@@ -13,8 +14,9 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { workspaces, currentWorkspace, setCurrentWorkspace } = useWorkspace();
+  const { sections, setSections, sectionPages, setSectionPages } = useSidebar();
   const [switcherOpen, setSwitcherOpen] = useState(false);
-  const [sections, setSections] = useState<Section[]>([]);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [isCreating, setIsCreating] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -45,6 +47,32 @@ export function Sidebar() {
 
     fetchSections();
   }, [currentWorkspace]);
+
+  const toggleSection = async (sectionId: string) => {
+    const isExpanded = expandedSections.has(sectionId);
+
+    if (isExpanded) {
+      const newExpanded = new Set(expandedSections);
+      newExpanded.delete(sectionId);
+      setExpandedSections(newExpanded);
+    } else {
+      // Always fetch fresh pages data
+      const { data } = await supabase
+        .from('pages')
+        .select('*')
+        .eq('section_id', sectionId)
+        .is('parent_id', null)
+        .order('display_order');
+
+      if (data) {
+        setSectionPages(prev => ({ ...prev, [sectionId]: data }));
+      }
+
+      const newExpanded = new Set(expandedSections);
+      newExpanded.add(sectionId);
+      setExpandedSections(newExpanded);
+    }
+  };
 
   const handleSwitch = (workspace: typeof workspaces[0]) => {
     setCurrentWorkspace(workspace);
@@ -157,11 +185,6 @@ export function Sidebar() {
 
   return (
     <aside className={styles.sidebar}>
-      <div className={styles.logo}>
-        <img src="/e.png" alt="" className={styles.logoImg} />
-        <span>edit</span>
-      </div>
-
       {currentWorkspace && (
         <div className={styles.workspaceSwitcher}>
           <button
@@ -207,86 +230,130 @@ export function Sidebar() {
       )}
 
       <nav className={styles.nav}>
-        {visibleSections.map((section) => (
-          <div key={section.id} className={styles.sectionItem}>
-            <NavLink
-              to={`/section/${section.id}`}
-              className={({ isActive }) =>
-                `${styles.navItem} ${isActive ? styles.active : ''}`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeNav"
-                      className={styles.activeIndicator}
-                      transition={{ type: 'spring', duration: 0.25, bounce: 0.15 }}
-                    />
-                  )}
-                  {section.name}
-                </>
-              )}
-            </NavLink>
-            {isOwner && (
-              <div className={styles.sectionMenuWrapper} ref={menuOpenId === section.id ? menuRef : null}>
+        {visibleSections.map((section) => {
+          const isExpanded = expandedSections.has(section.id);
+          const pages = sectionPages[section.id] || [];
+
+          return (
+            <div key={section.id} className={styles.sectionGroup}>
+              <div className={styles.sectionItem}>
                 <button
-                  className={styles.sectionMenuBtn}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setMenuOpenId(menuOpenId === section.id ? null : section.id);
-                  }}
+                  className={`${styles.expandBtn} ${isExpanded ? styles.expanded : ''}`}
+                  onClick={() => toggleSection(section.id)}
                 >
-                  ⋯
-                </button>
-                <AnimatePresence>
-                  {menuOpenId === section.id && (
-                    <motion.div
-                      className={styles.sectionMenu}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.1 }}
-                    >
-                      <button
-                        className={styles.sectionMenuItem}
-                        onClick={() => handleCreateDatabase(section)}
-                      >
-                        New database
-                      </button>
-                      <button
-                        className={styles.sectionMenuItem}
-                        onClick={() => handleCreateTextPage(section)}
-                      >
-                        New text page
-                      </button>
-                      <div className={styles.menuDivider} />
-                      <button
-                        className={styles.sectionMenuItem}
-                        onClick={() => openSectionSettings(section, 'members')}
-                      >
-                        Add members
-                      </button>
-                      <button
-                        className={styles.sectionMenuItem}
-                        onClick={() => openSectionSettings(section, 'general')}
-                      >
-                        Section settings
-                      </button>
-                      <button
-                        className={styles.sectionMenuItem}
-                        onClick={() => handleArchiveSection(section)}
-                      >
-                        Archive section
-                      </button>
-                    </motion.div>
+                  {section.icon && (
+                    <span className={styles.sectionIcon}>
+                      <PageIcon icon={section.icon} size={14} />
+                    </span>
                   )}
-                </AnimatePresence>
+                  <span className={styles.expandArrow}>›</span>
+                </button>
+                <NavLink
+                  to={`/section/${section.id}`}
+                  className={({ isActive }) =>
+                    `${styles.navItem} ${isActive ? styles.active : ''}`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <motion.div
+                          layoutId="activeNav"
+                          className={styles.activeIndicator}
+                          transition={{ type: 'spring', duration: 0.25, bounce: 0.15 }}
+                        />
+                      )}
+                      {section.name}
+                    </>
+                  )}
+                </NavLink>
+                {isOwner && (
+                  <div className={styles.sectionMenuWrapper} ref={menuOpenId === section.id ? menuRef : null}>
+                    <button
+                      className={styles.sectionMenuBtn}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setMenuOpenId(menuOpenId === section.id ? null : section.id);
+                      }}
+                    >
+                      ⋯
+                    </button>
+                    <AnimatePresence>
+                      {menuOpenId === section.id && (
+                        <motion.div
+                          className={styles.sectionMenu}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.1 }}
+                        >
+                          <button
+                            className={styles.sectionMenuItem}
+                            onClick={() => handleCreateDatabase(section)}
+                          >
+                            New database
+                          </button>
+                          <button
+                            className={styles.sectionMenuItem}
+                            onClick={() => handleCreateTextPage(section)}
+                          >
+                            New text page
+                          </button>
+                          <div className={styles.menuDivider} />
+                          <button
+                            className={styles.sectionMenuItem}
+                            onClick={() => openSectionSettings(section, 'members')}
+                          >
+                            Add members
+                          </button>
+                          <button
+                            className={styles.sectionMenuItem}
+                            onClick={() => openSectionSettings(section, 'general')}
+                          >
+                            Section settings
+                          </button>
+                          <button
+                            className={styles.sectionMenuItem}
+                            onClick={() => handleArchiveSection(section)}
+                          >
+                            Archive section
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+              <AnimatePresence>
+                {isExpanded && pages.length > 0 && (
+                  <motion.div
+                    className={styles.pagesList}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {pages.map((page) => (
+                      <NavLink
+                        key={page.id}
+                        to={`/section/${section.id}/page/${page.id}`}
+                        className={({ isActive }) =>
+                          `${styles.pageItem} ${isActive ? styles.pageItemActive : ''}`
+                        }
+                      >
+                        <span className={styles.pageIcon}>
+                          <PageIcon icon={page.icon || 'lucide:file-text:default'} size={14} />
+                        </span>
+                        {page.name}
+                      </NavLink>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
 
         {isOwner && (
           isCreating ? (

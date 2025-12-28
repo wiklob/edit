@@ -2,6 +2,80 @@
   padding: var(--spacing-lg) var(--spacing-xl);
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+
+.titleRow .pageTitle,
+.titleRow .pageTitleInput {
+  margin-bottom: 0;
+}
+
+.titleSection {
+  /* Wrapper for action row and title */
+}
+
+.actionRow {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.actionRow .actionBtn {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.titleSection:hover .actionBtn {
+  opacity: 1;
+}
+
+.actionBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.actionBtn:hover {
+  color: var(--color-text-secondary);
+}
+
+.pageTitle {
+  font-size: 2rem;
+  font-weight: 600;
+  margin: 0 0 var(--spacing-lg) 0;
+  color: var(--color-text);
+  cursor: text;
+}
+
+.pageTitle:hover {
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 4px;
+}
+
+.pageTitleInput {
+  font-size: 2rem;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  margin: 0 0 var(--spacing-lg) 0;
+  color: var(--color-text);
+  background: none;
+  border: none;
+  outline: none;
+  width: 100%;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 .loading {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-sm);
@@ -41,6 +115,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: var(--font-size-sm);
+  table-layout: fixed;
 }
 
 .table th,
@@ -67,20 +142,33 @@
 }
 
 .titleWrapper {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.rowIcon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
 }
 
 .titleText,
 .titleInput {
-  display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 0;
   margin: 0;
   background: none;
   border: none;
   font-size: inherit;
+  font-family: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
   color: var(--color-text);
   min-height: 1.4em;
+  box-sizing: border-box;
 }
 
 .titleText {
@@ -130,8 +218,12 @@
   background: none;
   border: none;
   font-size: inherit;
+  font-family: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
   color: var(--color-text);
   min-height: 1.4em;
+  box-sizing: border-box;
 }
 
 .cellText {

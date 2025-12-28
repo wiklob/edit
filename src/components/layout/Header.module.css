@@ -2,8 +2,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-lg) var(--spacing-xl);
+  padding: 8px;
   border-bottom: 1px solid var(--color-border);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .title {

@@ -1,0 +1,41 @@
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.separator {
+  color: var(--color-text-tertiary);
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.link:hover {
+  color: var(--color-text);
+}
+
+.current {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+}

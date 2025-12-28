@@ -7,7 +7,7 @@ export function Login() {
   return (
     <div className={styles.container}>
       <div className={styles.card}>
-        <img src="/e.png" alt="" className={styles.logo} />
+        <img src="/e5.png" alt="" className={styles.logo} />
         <h1 className={styles.title}>edit</h1>
         <p className={styles.subtitle}>Sign in to continue</p>
         <button onClick={signInWithGoogle} className={styles.button}>

@@ -1,24 +1,29 @@
-import { useState, useEffect } from 'react';
-import { Header } from '../components/layout';
-import { supabase } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { IconPicker } from '../components/common';
+import type { IconPickerHandle } from '../components/common';
+import { supabase, useBreadcrumbs, useSidebar } from '../lib';
 import type { Page, PagePropertyWithColumn } from '../types';
 import styles from './Page.module.css';
 
 interface TextPageProps {
   page: Page;
-  onUpdate: (page: Page) => void;
 }
 
-export function TextPage({ page, onUpdate }: TextPageProps) {
+const DEFAULT_ICON = 'lucide:file-text:default';
+
+export function TextPage({ page }: TextPageProps) {
+  const { breadcrumbs, setBreadcrumbs } = useBreadcrumbs();
+  const { updatePageIcon } = useSidebar();
+  const iconPickerRef = useRef<IconPickerHandle>(null);
+  const [pageIcon, setPageIcon] = useState(page.icon);
+  const [pageName, setPageName] = useState(page.name);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState(page.name);
   const [properties, setProperties] = useState<PagePropertyWithColumn[]>([]);
   const [content, setContent] = useState(page.content || '');
   const [loading, setLoading] = useState(true);
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [editName, setEditName] = useState(page.name);
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [editPropertyValue, setEditPropertyValue] = useState('');
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editTitleValue, setEditTitleValue] = useState(page.name);
 
   useEffect(() => {
     const fetchProperties = async () => {
@@ -43,28 +48,92 @@ export function TextPage({ page, onUpdate }: TextPageProps) {
     fetchProperties();
   }, [page.id, page.parent_id]);
 
-  const handleNameSave = async () => {
-    if (editName.trim() && editName !== page.name) {
-      const newName = editName.trim();
+  const handleStartEditTitle = () => {
+    setIsEditingTitle(true);
+    setEditTitleValue(pageName);
+  };
 
+  const handleSaveTitle = async () => {
+    const newName = editTitleValue.trim();
+    if (newName && newName !== pageName) {
       const { error } = await supabase
         .from('pages')
         .update({ name: newName })
         .eq('id', page.id);
 
       if (!error) {
-        onUpdate({ ...page, name: newName });
+        setPageName(newName);
+        // Update breadcrumbs
+        const updated = [...breadcrumbs];
+        if (updated.length > 0) {
+          updated[updated.length - 1] = { ...updated[updated.length - 1], label: newName };
+        }
+        setBreadcrumbs(updated);
       }
     }
-    setIsEditingName(false);
+    setIsEditingTitle(false);
   };
 
-  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      handleNameSave();
+      handleSaveTitle();
     } else if (e.key === 'Escape') {
-      setEditName(page.name);
-      setIsEditingName(false);
+      setIsEditingTitle(false);
+    }
+  };
+
+  const handleIconChange = async (newIcon: string) => {
+    const { error } = await supabase
+      .from('pages')
+      .update({ icon: newIcon })
+      .eq('id', page.id);
+
+    if (!error) {
+      setPageIcon(newIcon);
+      updatePageIcon(page.id, newIcon);
+      // Update breadcrumbs
+      const updated = [...breadcrumbs];
+      if (updated.length > 0) {
+        updated[updated.length - 1] = { ...updated[updated.length - 1], icon: newIcon };
+      }
+      setBreadcrumbs(updated);
+    }
+  };
+
+  const handleAddIcon = async () => {
+    const { error } = await supabase
+      .from('pages')
+      .update({ icon: DEFAULT_ICON })
+      .eq('id', page.id);
+
+    if (!error) {
+      setPageIcon(DEFAULT_ICON);
+      updatePageIcon(page.id, DEFAULT_ICON);
+      // Update breadcrumbs
+      const updated = [...breadcrumbs];
+      if (updated.length > 0) {
+        updated[updated.length - 1] = { ...updated[updated.length - 1], icon: DEFAULT_ICON };
+      }
+      setBreadcrumbs(updated);
+      setTimeout(() => iconPickerRef.current?.open(), 0);
+    }
+  };
+
+  const handleRemoveIcon = async () => {
+    const { error } = await supabase
+      .from('pages')
+      .update({ icon: null })
+      .eq('id', page.id);
+
+    if (!error) {
+      setPageIcon(null);
+      updatePageIcon(page.id, null);
+      // Update breadcrumbs
+      const updated = [...breadcrumbs];
+      if (updated.length > 0) {
+        updated[updated.length - 1] = { ...updated[updated.length - 1], icon: null };
+      }
+      setBreadcrumbs(updated);
     }
   };
 
@@ -110,121 +179,74 @@ export function TextPage({ page, onUpdate }: TextPageProps) {
     }
   };
 
-  const handleStartEditTitle = () => {
-    setIsEditingTitle(true);
-    setEditTitleValue(page.name);
-  };
-
-  const handleSaveTitle = async () => {
-    if (editTitleValue.trim() && editTitleValue.trim() !== page.name) {
-      const newName = editTitleValue.trim();
-      const { error } = await supabase
-        .from('pages')
-        .update({ name: newName })
-        .eq('id', page.id);
-
-      if (!error) {
-        onUpdate({ ...page, name: newName });
-        setEditName(newName);
-      }
-    }
-    setIsEditingTitle(false);
-  };
-
-  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSaveTitle();
-    } else if (e.key === 'Escape') {
-      setIsEditingTitle(false);
-    }
-  };
-
-  const headerContent = isEditingName ? (
-    <input
-      type="text"
-      value={editName}
-      onChange={(e) => setEditName(e.target.value)}
-      onBlur={handleNameSave}
-      onKeyDown={handleNameKeyDown}
-      className={styles.nameInput}
-      autoFocus
-    />
-  ) : (
-    <span onClick={() => setIsEditingName(true)} className={styles.editableName}>
-      {page.name}
-    </span>
-  );
-
   if (loading) {
-    return (
-      <div>
-        <Header title="Loading..." />
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div>
-      <Header title={headerContent} />
-      <div className={styles.content}>
-        {page.parent_id && (
-          <div className={styles.propertiesSection}>
-            {/* Title property - uses pages.name directly */}
-            <div className={styles.propertyRow}>
-              <label className={styles.propertyLabel}>Title</label>
-              {isEditingTitle ? (
+    <div className={styles.content}>
+      {pageIcon && (
+        <IconPicker ref={iconPickerRef} icon={pageIcon} onSelect={handleIconChange} onRemove={handleRemoveIcon} size="large" />
+      )}
+      <div className={styles.titleSection}>
+        <div className={styles.actionRow}>
+          {!pageIcon && (
+            <button className={styles.actionBtn} onClick={handleAddIcon} type="button">
+              Add icon
+            </button>
+          )}
+        </div>
+        {isEditingTitle ? (
+          <input
+            type="text"
+            value={editTitleValue}
+            onChange={(e) => setEditTitleValue(e.target.value)}
+            onBlur={handleSaveTitle}
+            onKeyDown={handleTitleKeyDown}
+            className={styles.pageTitleInput}
+            autoFocus
+          />
+        ) : (
+          <h1 className={styles.pageTitle} onClick={handleStartEditTitle}>
+            {pageName}
+          </h1>
+        )}
+      </div>
+      {page.parent_id && (
+        <div className={styles.propertiesSection}>
+          {/* Properties from database columns */}
+          {properties.map((prop) => (
+            <div key={prop.id} className={styles.propertyRow}>
+              <label className={styles.propertyLabel}>{prop.column.name}</label>
+              {editingPropertyId === prop.id ? (
                 <input
                   type="text"
-                  value={editTitleValue}
-                  onChange={(e) => setEditTitleValue(e.target.value)}
-                  onBlur={handleSaveTitle}
-                  onKeyDown={handleTitleKeyDown}
+                  value={editPropertyValue}
+                  onChange={(e) => setEditPropertyValue(e.target.value)}
+                  onBlur={handleSaveProperty}
+                  onKeyDown={handlePropertyKeyDown}
                   className={styles.propertyInput}
                   autoFocus
                 />
               ) : (
                 <span
                   className={styles.propertyValue}
-                  onClick={handleStartEditTitle}
+                  onClick={() => handleStartEditProperty(prop)}
                 >
-                  {page.name}
+                  {prop.value || 'Empty'}
                 </span>
               )}
             </div>
-            {/* Other properties from database columns */}
-            {properties.map((prop) => (
-              <div key={prop.id} className={styles.propertyRow}>
-                <label className={styles.propertyLabel}>{prop.column.name}</label>
-                {editingPropertyId === prop.id ? (
-                  <input
-                    type="text"
-                    value={editPropertyValue}
-                    onChange={(e) => setEditPropertyValue(e.target.value)}
-                    onBlur={handleSaveProperty}
-                    onKeyDown={handlePropertyKeyDown}
-                    className={styles.propertyInput}
-                    autoFocus
-                  />
-                ) : (
-                  <span
-                    className={styles.propertyValue}
-                    onClick={() => handleStartEditProperty(prop)}
-                  >
-                    {prop.value || 'Empty'}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        <textarea
-          value={content}
-          onChange={(e) => handleContentChange(e.target.value)}
-          onBlur={handleContentBlur}
-          className={styles.contentEditor}
-          placeholder="Start writing..."
-        />
-      </div>
+          ))}
+        </div>
+      )}
+      <textarea
+        value={content}
+        onChange={(e) => handleContentChange(e.target.value)}
+        onBlur={handleContentBlur}
+        className={styles.contentEditor}
+        placeholder="Start writing..."
+      />
     </div>
   );
 }

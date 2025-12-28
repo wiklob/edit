@@ -1,26 +1,31 @@
 import { Outlet } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { BreadcrumbProvider, SidebarProvider, useBreadcrumbs } from '../../lib';
 import { Sidebar } from './Sidebar';
+import { Header } from './Header';
 import styles from './Layout.module.css';
+
+function MainContent() {
+  const { breadcrumbs } = useBreadcrumbs();
+
+  return (
+    <main className={styles.main}>
+      {breadcrumbs.length > 0 && <Header breadcrumbs={breadcrumbs} />}
+      <div className={styles.content}>
+        <Outlet />
+      </div>
+    </main>
+  );
+}
 
 export function Layout() {
   return (
-    <div className={styles.layout}>
-      <Sidebar />
-      <main className={styles.main}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.15 }}
-            className={styles.content}
-          >
-            <Outlet />
-          </motion.div>
-        </AnimatePresence>
-      </main>
-    </div>
+    <SidebarProvider>
+      <BreadcrumbProvider>
+        <div className={styles.layout}>
+          <Sidebar />
+          <MainContent />
+        </div>
+      </BreadcrumbProvider>
+    </SidebarProvider>
   );
 }

@@ -24,6 +24,8 @@
 }
 
 .pageIcon {
+  display: flex;
+  align-items: center;
   font-size: var(--font-size-md);
   color: var(--color-text-tertiary);
 }

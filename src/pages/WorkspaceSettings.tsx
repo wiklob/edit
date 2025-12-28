@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import type { WorkspaceMemberWithUser, JoinRequestWithUser, Section } from '../types';
 import styles from './WorkspaceSettings.module.css';
 
-type Tab = 'members' | 'requests' | 'archive';
+type Tab = 'general' | 'members' | 'requests' | 'archive';
 
 interface ConfirmAction {
   type: 'revoke' | 'revokeAll';
@@ -16,8 +16,11 @@ interface ConfirmAction {
 }
 
 export function WorkspaceSettings() {
-  const { currentWorkspace } = useWorkspace();
-  const [activeTab, setActiveTab] = useState<Tab>('members');
+  const { currentWorkspace, refetch, setCurrentWorkspace } = useWorkspace();
+  const [activeTab, setActiveTab] = useState<Tab>('general');
+  const [workspaceName, setWorkspaceName] = useState(currentWorkspace?.name || '');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
   const [members, setMembers] = useState<WorkspaceMemberWithUser[]>([]);
   const [requests, setRequests] = useState<JoinRequestWithUser[]>([]);
   const [archivedSections, setArchivedSections] = useState<Section[]>([]);
@@ -113,6 +116,45 @@ export function WorkspaceSettings() {
 
     fetchData();
   }, [currentWorkspace, isOwner]);
+
+  // Sync workspace name when currentWorkspace changes
+  useEffect(() => {
+    if (currentWorkspace) {
+      setWorkspaceName(currentWorkspace.name);
+    }
+  }, [currentWorkspace]);
+
+  const handleStartEditName = () => {
+    setIsEditingName(true);
+    setEditNameValue(workspaceName);
+  };
+
+  const handleSaveName = async () => {
+    const newName = editNameValue.trim();
+    if (newName && newName !== workspaceName && currentWorkspace) {
+      const { error } = await supabase
+        .from('workspaces')
+        .update({ name: newName })
+        .eq('id', currentWorkspace.id);
+
+      if (!error) {
+        setWorkspaceName(newName);
+        // Refetch workspaces to update the context
+        await refetch();
+        // Update the current workspace with the new name
+        setCurrentWorkspace({ ...currentWorkspace, name: newName });
+      }
+    }
+    setIsEditingName(false);
+  };
+
+  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveName();
+    } else if (e.key === 'Escape') {
+      setIsEditingName(false);
+    }
+  };
 
   const handleApprove = async (requestId: string) => {
     const { error } = await supabase.rpc('approve_join_request', {
@@ -236,6 +278,12 @@ export function WorkspaceSettings() {
       <div className={styles.content}>
         <div className={styles.tabs}>
           <button
+            className={`${styles.tab} ${activeTab === 'general' ? styles.tabActive : ''}`}
+            onClick={() => setActiveTab('general')}
+          >
+            General
+          </button>
+          <button
             className={`${styles.tab} ${activeTab === 'members' ? styles.tabActive : ''}`}
             onClick={() => setActiveTab('members')}
           >
@@ -264,6 +312,32 @@ export function WorkspaceSettings() {
 
         {loading ? (
           <div className={styles.loading}>Loading...</div>
+        ) : activeTab === 'general' ? (
+          <div className={styles.generalSettings}>
+            <div className={styles.settingRow}>
+              <label className={styles.settingLabel}>Name</label>
+              <div className={styles.settingValue}>
+                {isEditingName ? (
+                  <input
+                    type="text"
+                    value={editNameValue}
+                    onChange={(e) => setEditNameValue(e.target.value)}
+                    onBlur={handleSaveName}
+                    onKeyDown={handleNameKeyDown}
+                    className={styles.settingInput}
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className={styles.settingText}
+                    onClick={handleStartEditName}
+                  >
+                    {workspaceName}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
         ) : activeTab === 'members' ? (
           <div className={styles.membersTable}>
             {members.length === 0 ? (

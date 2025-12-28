@@ -37,6 +37,7 @@ export interface Section {
   id: string;
   workspace_id: string;
   name: string;
+  icon: string | null;
   display_order: number;
   is_archived: boolean;
   created_at: string;
@@ -90,6 +91,7 @@ export interface Page {
   type: PageType;
   database_type: DatabaseType | null;
   name: string;
+  icon: string | null;
   content: string | null;
   display_order: number;
   created_at: string;

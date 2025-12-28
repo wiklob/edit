@@ -1,56 +1,91 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Header } from '../components/layout';
 import { Placeholder } from '../components/common';
-import { supabase } from '../lib/supabase';
+import { supabase, useBreadcrumbs } from '../lib';
 import { DatabasePage } from './DatabasePage';
 import { TextPage } from './TextPage';
 import type { Page as PageType } from '../types';
 
 export function Page() {
-  const { pageId } = useParams<{ pageId: string }>();
+  const { id: sectionId, pageId } = useParams<{ id: string; pageId: string }>();
+  const { setBreadcrumbs } = useBreadcrumbs();
   const [page, setPage] = useState<PageType | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!pageId) return;
+    if (!pageId || !sectionId) return;
 
-    const fetchPage = async () => {
-      const { data } = await supabase
+    const fetchData = async () => {
+      let fetchedPage: PageType | null = null;
+      let fetchedParent: PageType | null = null;
+      let fetchedSection: { id: string; name: string; icon: string | null } | null = null;
+
+      // Fetch page
+      const { data: pageData } = await supabase
         .from('pages')
         .select('*')
         .eq('id', pageId)
         .single();
 
-      if (data) {
-        setPage(data);
+      if (pageData) {
+        fetchedPage = pageData;
+        setPage(pageData);
+
+        // Fetch parent page if exists
+        if (pageData.parent_id) {
+          const { data: parentData } = await supabase
+            .from('pages')
+            .select('*')
+            .eq('id', pageData.parent_id)
+            .single();
+
+          if (parentData) {
+            fetchedParent = parentData;
+          }
+        }
       }
+
+      // Fetch section
+      const { data: sectionData } = await supabase
+        .from('sections')
+        .select('*')
+        .eq('id', sectionId)
+        .single();
+
+      if (sectionData) {
+        fetchedSection = sectionData;
+      }
+
+      // Build and set breadcrumbs
+      const items = [];
+      if (fetchedSection) {
+        items.push({ label: fetchedSection.name, icon: fetchedSection.icon, to: `/section/${fetchedSection.id}` });
+      }
+      if (fetchedParent) {
+        items.push({ label: fetchedParent.name, icon: fetchedParent.icon, to: `/section/${sectionId}/page/${fetchedParent.id}` });
+      }
+      if (fetchedPage) {
+        items.push({ label: fetchedPage.name, icon: fetchedPage.icon });
+      }
+      setBreadcrumbs(items);
+
       setLoading(false);
     };
 
-    fetchPage();
-  }, [pageId]);
+    fetchData();
+  }, [pageId, sectionId, setBreadcrumbs]);
 
   if (loading) {
-    return (
-      <div>
-        <Header title="Loading..." />
-      </div>
-    );
+    return null;
   }
 
   if (!page) {
-    return (
-      <div>
-        <Header title="Page not found" />
-        <Placeholder message="This page doesn't exist or you don't have access" />
-      </div>
-    );
+    return <Placeholder message="This page doesn't exist or you don't have access" />;
   }
 
   if (page.type === 'database') {
-    return <DatabasePage page={page} onUpdate={setPage} />;
+    return <DatabasePage page={page} />;
   }
 
-  return <TextPage page={page} onUpdate={setPage} />;
+  return <TextPage page={page} />;
 }
