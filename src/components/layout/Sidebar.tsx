@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth, useWorkspace } from '../../lib';
 import { supabase } from '../../lib/supabase';
 import { SectionSettingsModal } from '../modals';
-import type { Section, Page } from '../../types';
+import type { Section } from '../../types';
 import styles from './Sidebar.module.css';
 
 type ModalTab = 'general' | 'members' | 'security';

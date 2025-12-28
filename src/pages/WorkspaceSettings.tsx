@@ -52,7 +52,7 @@ export function WorkspaceSettings() {
 
       // Fetch pending requests (only for owners)
       if (isOwner) {
-        const { data: requestsData, error: requestsError } = await supabase
+        const { data: requestsData } = await supabase
           .from('workspace_join_requests')
           .select(`
             *,
