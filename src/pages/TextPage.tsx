@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { IconPicker } from '../components/common';
 import type { IconPickerHandle } from '../components/common';
+import { PropertyInput, PropertyValue } from '../components/properties';
 import { supabase, useBreadcrumbs, useSidebar } from '../lib';
-import type { Page, PagePropertyWithColumn } from '../types';
+import type { Page, PagePropertyWithColumn, ColumnType } from '../types';
 import styles from './Page.module.css';
 
 interface TextPageProps {
@@ -171,12 +172,22 @@ export function TextPage({ page }: TextPageProps) {
     setEditingPropertyId(null);
   };
 
-  const handlePropertyKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSaveProperty();
-    } else if (e.key === 'Escape') {
-      setEditingPropertyId(null);
+  // For immediate-save types (checkbox, select, multi_select), save on change
+  const handleImmediateSave = async (propId: string, value: string) => {
+    const { error } = await supabase
+      .from('page_properties')
+      .update({ value })
+      .eq('id', propId);
+
+    if (!error) {
+      setProperties(properties.map(p =>
+        p.id === propId ? { ...p, value } : p
+      ));
     }
+  };
+
+  const isImmediateSaveType = (type: ColumnType) => {
+    return type === 'checkbox' || type === 'select' || type === 'multi_select';
   };
 
   if (loading) {
@@ -212,32 +223,49 @@ export function TextPage({ page }: TextPageProps) {
           </h1>
         )}
       </div>
-      {page.parent_id && (
+      {page.parent_id && properties.length > 0 && (
         <div className={styles.propertiesSection}>
           {/* Properties from database columns */}
-          {properties.map((prop) => (
-            <div key={prop.id} className={styles.propertyRow}>
-              <label className={styles.propertyLabel}>{prop.column.name}</label>
-              {editingPropertyId === prop.id ? (
-                <input
-                  type="text"
-                  value={editPropertyValue}
-                  onChange={(e) => setEditPropertyValue(e.target.value)}
-                  onBlur={handleSaveProperty}
-                  onKeyDown={handlePropertyKeyDown}
-                  className={styles.propertyInput}
-                  autoFocus
-                />
-              ) : (
-                <span
-                  className={styles.propertyValue}
-                  onClick={() => handleStartEditProperty(prop)}
-                >
-                  {prop.value || 'Empty'}
-                </span>
-              )}
-            </div>
-          ))}
+          {properties.map((prop) => {
+            const columnType = prop.column.property_type;
+            const isImmediate = isImmediateSaveType(columnType);
+
+            return (
+              <div key={prop.id} className={styles.propertyRow}>
+                <label className={styles.propertyLabel}>{prop.column.name}</label>
+                <div className={styles.propertyValue}>
+                  {isImmediate ? (
+                    // Immediate save types: always show input
+                    <PropertyInput
+                      type={columnType}
+                      value={prop.value || ''}
+                      options={prop.column.options}
+                      onChange={(value) => handleImmediateSave(prop.id, value)}
+                    />
+                  ) : editingPropertyId === prop.id ? (
+                    // Text-like types: show input only when editing
+                    <PropertyInput
+                      type={columnType}
+                      value={editPropertyValue}
+                      options={prop.column.options}
+                      onChange={setEditPropertyValue}
+                      onBlur={handleSaveProperty}
+                      autoFocus
+                    />
+                  ) : (
+                    // Read mode for text-like types
+                    <PropertyValue
+                      type={columnType}
+                      value={prop.value}
+                      options={prop.column.options}
+                      onClick={() => handleStartEditProperty(prop)}
+                      emptyText="Empty"
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
       <textarea

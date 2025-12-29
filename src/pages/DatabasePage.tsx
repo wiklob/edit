@@ -1,9 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
 import { IconPicker, PageIcon } from '../components/common';
+import { AddColumnPopover, ColumnSettingsPopup } from '../components/modals';
+import { PropertyInput, PropertyValue } from '../components/properties';
+import {
+  TableControls,
+  PillsRow,
+  SortPopup,
+  FilterPopup,
+  type SortLevel,
+  type Filter,
+} from '../components/database';
 import { supabase, useBreadcrumbs, useSidebar } from '../lib';
-import type { Page, DatabaseColumn, PageWithProperties } from '../types';
+import type { Page, DatabaseColumn, PageWithProperties, ColumnType } from '../types';
 import styles from './Page.module.css';
+
+// Default column widths
+const DEFAULT_WIDTH = 150;
+const CHECKBOX_WIDTH = 80;
+const TITLE_WIDTH = 200;
+const MIN_WIDTH = 50;
+
+const getDefaultWidth = (type: ColumnType): number => {
+  return type === 'checkbox' ? CHECKBOX_WIDTH : DEFAULT_WIDTH;
+};
 
 interface DatabasePageProps {
   page: Page;
@@ -24,6 +45,18 @@ export function DatabasePage({ page }: DatabasePageProps) {
   const [editRowTitleValue, setEditRowTitleValue] = useState('');
   const [editingProperty, setEditingProperty] = useState<{ rowId: string; columnId: string } | null>(null);
   const [editPropertyValue, setEditPropertyValue] = useState('');
+  const [addColumnAnchor, setAddColumnAnchor] = useState<DOMRect | null>(null);
+  const [settingsColumn, setSettingsColumn] = useState<{ column: DatabaseColumn; rect: DOMRect } | null>(null);
+  const [titleWidth, setTitleWidth] = useState(TITLE_WIDTH);
+  const [resizing, setResizing] = useState<{ columnId: string | 'title'; startX: number; startWidth: number } | null>(null);
+  const [sorts, setSorts] = useState<SortLevel[]>([]);
+  const [filters, setFilters] = useState<Filter[]>([]);
+  const [sortPopupAnchor, setSortPopupAnchor] = useState<DOMRect | null>(null);
+  const [autoOpenSortPopup, setAutoOpenSortPopup] = useState(false);
+  const [sortPillVisible, setSortPillVisible] = useState(false);
+  const [editingFilter, setEditingFilter] = useState<{ filter: Filter; rect: DOMRect } | null>(null);
+  const [autoOpenFilterId, setAutoOpenFilterId] = useState<string | null>(null);
+  const addColumnBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -54,6 +87,159 @@ export function DatabasePage({ page }: DatabasePageProps) {
 
     fetchData();
   }, [page.id]);
+
+  // Virtual Title column for sort/filter
+  const TITLE_COLUMN_ID = '__title__';
+  const sortableColumns = useMemo(() => {
+    const titleColumn: DatabaseColumn = {
+      id: TITLE_COLUMN_ID,
+      page_id: page.id,
+      name: 'Title',
+      property_type: 'text',
+      display_order: -1,
+      created_at: '',
+    };
+    return [titleColumn, ...columns.filter(c => c.name !== 'Title')];
+  }, [columns, page.id]);
+
+  // Filter and sort rows
+  const processedRows = useMemo(() => {
+    let result = [...rows];
+
+    // Apply filters
+    if (filters.length > 0) {
+      result = result.filter(row => {
+        return filters.every(filter => {
+          // Handle Title column specially
+          const value = filter.columnId === TITLE_COLUMN_ID
+            ? row.name
+            : (row.properties.find(p => p.column_id === filter.columnId)?.value || '');
+
+          switch (filter.operator) {
+            case 'is':
+              return value.toLowerCase() === filter.value.toLowerCase();
+            case 'is_not':
+              return value.toLowerCase() !== filter.value.toLowerCase();
+            case 'contains':
+              return value.toLowerCase().includes(filter.value.toLowerCase());
+            case 'does_not_contain':
+              return !value.toLowerCase().includes(filter.value.toLowerCase());
+            case 'starts_with':
+              return value.toLowerCase().startsWith(filter.value.toLowerCase());
+            case 'ends_with':
+              return value.toLowerCase().endsWith(filter.value.toLowerCase());
+            case 'is_empty':
+              return !value || value === '' || value === '[]';
+            case 'is_not_empty':
+              return value && value !== '' && value !== '[]';
+            default:
+              return true;
+          }
+        });
+      });
+    }
+
+    // Apply sorts
+    if (sorts.length > 0) {
+      result.sort((a, b) => {
+        for (const sort of sorts) {
+          // Handle Title column specially
+          let valueA: string;
+          let valueB: string;
+          let column: DatabaseColumn | undefined;
+
+          if (sort.columnId === TITLE_COLUMN_ID) {
+            valueA = a.name;
+            valueB = b.name;
+            column = { property_type: 'text' } as DatabaseColumn;
+          } else {
+            const propA = a.properties.find(p => p.column_id === sort.columnId);
+            const propB = b.properties.find(p => p.column_id === sort.columnId);
+            valueA = propA?.value || '';
+            valueB = propB?.value || '';
+            column = columns.find(c => c.id === sort.columnId);
+          }
+
+          let comparison = 0;
+
+          if (column?.property_type === 'number') {
+            const numA = parseFloat(valueA) || 0;
+            const numB = parseFloat(valueB) || 0;
+            comparison = numA - numB;
+          } else if (column?.property_type === 'date') {
+            const dateA = new Date(valueA || 0).getTime();
+            const dateB = new Date(valueB || 0).getTime();
+            comparison = dateA - dateB;
+          } else if (column?.property_type === 'checkbox') {
+            comparison = (valueA === 'true' ? 1 : 0) - (valueB === 'true' ? 1 : 0);
+          } else {
+            comparison = valueA.localeCompare(valueB);
+          }
+
+          if (comparison !== 0) {
+            return sort.direction === 'asc' ? comparison : -comparison;
+          }
+        }
+        return 0;
+      });
+    }
+
+    return result;
+  }, [rows, filters, sorts, columns]);
+
+  // Sort/Filter handlers
+  const handleSortButtonClick = () => {
+    setSortPillVisible(true);
+    if (sorts.length === 0) {
+      // Add first sort with Title, then auto-open popup at pill
+      setSorts([{
+        id: crypto.randomUUID(),
+        columnId: TITLE_COLUMN_ID,
+        direction: 'asc',
+      }]);
+    }
+    setAutoOpenSortPopup(true);
+  };
+
+  const handleOpenSortPopup = (rect: DOMRect) => {
+    setSortPopupAnchor(rect);
+    setAutoOpenSortPopup(false);
+  };
+
+  const handleDeleteAllSorts = () => {
+    setSorts([]);
+    setSortPopupAnchor(null);
+    setSortPillVisible(false);
+    setAutoOpenSortPopup(false);
+  };
+
+  const handleFilterButtonClick = () => {
+    // Add a new filter with defaults, then auto-open popup at pill
+    const newFilter: Filter = {
+      id: crypto.randomUUID(),
+      columnId: sortableColumns[0]?.id || '',
+      operator: 'contains',
+      value: '',
+    };
+    setFilters([...filters, newFilter]);
+    setAutoOpenFilterId(newFilter.id);
+  };
+
+  const handleOpenFilterPopup = (filterId: string, rect: DOMRect) => {
+    const filter = filters.find(f => f.id === filterId);
+    if (filter) {
+      setEditingFilter({ filter, rect });
+    }
+    setAutoOpenFilterId(null);
+  };
+
+  const handleSaveFilter = (filter: Filter) => {
+    setFilters(filters.map(f => f.id === filter.id ? filter : f));
+  };
+
+  const handleRemoveFilter = (filterId: string) => {
+    setFilters(filters.filter(f => f.id !== filterId));
+  };
 
   const handleStartEditTitle = () => {
     setIsEditingTitle(true);
@@ -134,11 +320,31 @@ export function DatabasePage({ page }: DatabasePageProps) {
         type: 'text',
         name: 'Untitled',
       })
-      .select('*, properties:page_properties(*, column:database_columns(*))')
+      .select()
       .single();
 
     if (data && !error) {
-      setRows([...rows, data as unknown as PageWithProperties]);
+      // Create page_properties entries for all existing columns
+      if (columns.length > 0) {
+        const propertiesToInsert = columns.map(col => ({
+          page_id: data.id,
+          column_id: col.id,
+          value: null,
+        }));
+
+        await supabase.from('page_properties').insert(propertiesToInsert);
+      }
+
+      // Fetch the row with its properties
+      const { data: rowWithProperties } = await supabase
+        .from('pages')
+        .select('*, properties:page_properties(*, column:database_columns(*))')
+        .eq('id', data.id)
+        .single();
+
+      if (rowWithProperties) {
+        setRows([...rows, rowWithProperties as unknown as PageWithProperties]);
+      }
     }
   };
 
@@ -179,13 +385,219 @@ export function DatabasePage({ page }: DatabasePageProps) {
     setEditingProperty(null);
   };
 
-  const handlePropertyKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSaveProperty();
-    } else if (e.key === 'Escape') {
-      setEditingProperty(null);
+  // For immediate-save types (checkbox, select, multi_select), save on change
+  const handleImmediateSave = async (rowId: string, columnId: string, value: string) => {
+    const { error } = await supabase
+      .from('page_properties')
+      .update({ value })
+      .eq('page_id', rowId)
+      .eq('column_id', columnId);
+
+    if (!error) {
+      setRows(rows.map(row => {
+        if (row.id !== rowId) return row;
+        return {
+          ...row,
+          properties: row.properties.map(prop =>
+            prop.column_id === columnId ? { ...prop, value } : prop
+          ),
+        };
+      }));
     }
   };
+
+  const isImmediateSaveType = (type: ColumnType) => {
+    return type === 'checkbox' || type === 'select' || type === 'multi_select' || type === 'date';
+  };
+
+  // Get display name for column type
+  const getTypeLabel = (type: ColumnType): string => {
+    const labels: Record<ColumnType, string> = {
+      text: 'Text',
+      number: 'Number',
+      checkbox: 'Checkbox',
+      date: 'Date',
+      url: 'URL',
+      select: 'Select',
+      multi_select: 'Multi-select',
+    };
+    return labels[type];
+  };
+
+  const handleCreateColumn = async (type: ColumnType) => {
+    const defaultName = getTypeLabel(type);
+    const defaultWidth = getDefaultWidth(type);
+    const maxOrder = columns.length > 0
+      ? Math.max(...columns.map(c => c.display_order))
+      : 0;
+
+    const { data, error } = await supabase
+      .from('database_columns')
+      .insert({
+        page_id: page.id,
+        name: defaultName,
+        property_type: type,
+        width: defaultWidth,
+        display_order: maxOrder + 1,
+      })
+      .select()
+      .single();
+
+    if (data && !error) {
+      setColumns([...columns, data]);
+      setAddColumnAnchor(null);
+
+      // Create page_properties for existing rows
+      if (rows.length > 0) {
+        const propertiesToInsert = rows.map(row => ({
+          page_id: row.id,
+          column_id: data.id,
+          value: null,
+        }));
+
+        await supabase
+          .from('page_properties')
+          .insert(propertiesToInsert);
+
+        // Update local rows state with new empty properties
+        setRows(rows.map(row => ({
+          ...row,
+          properties: [
+            ...row.properties,
+            {
+              id: crypto.randomUUID(),
+              page_id: row.id,
+              column_id: data.id,
+              value: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              column: data,
+            },
+          ],
+        })));
+      }
+
+      // Open settings popup for the new column to edit name
+      // We need to wait for render to get the header rect
+      setTimeout(() => {
+        const headerEl = document.querySelector(`[data-column-id="${data.id}"]`);
+        if (headerEl) {
+          setSettingsColumn({ column: data, rect: headerEl.getBoundingClientRect() });
+        }
+      }, 50);
+    }
+  };
+
+  const handleOpenColumnSettings = (column: DatabaseColumn, headerEl: HTMLElement) => {
+    setSettingsColumn({ column, rect: headerEl.getBoundingClientRect() });
+  };
+
+  const handleSaveColumnName = async (columnId: string, newName: string) => {
+    const { error } = await supabase
+      .from('database_columns')
+      .update({ name: newName })
+      .eq('id', columnId);
+
+    if (!error) {
+      setColumns(columns.map(c =>
+        c.id === columnId ? { ...c, name: newName } : c
+      ));
+      // Update column references in rows
+      setRows(rows.map(row => ({
+        ...row,
+        properties: row.properties.map(prop =>
+          prop.column_id === columnId
+            ? { ...prop, column: { ...prop.column, name: newName } }
+            : prop
+        ),
+      })));
+    }
+    setSettingsColumn(null);
+  };
+
+  const handleDeleteColumn = async (columnId: string) => {
+    const { error } = await supabase
+      .from('database_columns')
+      .delete()
+      .eq('id', columnId);
+
+    if (!error) {
+      setColumns(columns.filter(c => c.id !== columnId));
+      // Remove properties for this column from rows
+      setRows(rows.map(row => ({
+        ...row,
+        properties: row.properties.filter(prop => prop.column_id !== columnId),
+      })));
+    }
+    setSettingsColumn(null);
+  };
+
+  const handleAddColumnClick = () => {
+    if (addColumnBtnRef.current) {
+      setAddColumnAnchor(addColumnBtnRef.current.getBoundingClientRect());
+    }
+  };
+
+  // Get column width (from DB or default)
+  const getColumnWidth = (column: DatabaseColumn): number => {
+    return column.width ?? getDefaultWidth(column.property_type);
+  };
+
+  // Resize handlers
+  const handleResizeStart = (e: React.MouseEvent, columnId: string | 'title', currentWidth: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizing({ columnId, startX: e.clientX, startWidth: currentWidth });
+  };
+
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (!resizing) return;
+    const delta = e.clientX - resizing.startX;
+    const newWidth = Math.max(MIN_WIDTH, resizing.startWidth + delta);
+
+    if (resizing.columnId === 'title') {
+      setTitleWidth(newWidth);
+    } else {
+      setColumns(cols => cols.map(col =>
+        col.id === resizing.columnId ? { ...col, width: newWidth } : col
+      ));
+    }
+  }, [resizing]);
+
+  const handleResizeEnd = useCallback(async () => {
+    if (!resizing) return;
+
+    // Save width to database
+    if (resizing.columnId !== 'title') {
+      const column = columns.find(c => c.id === resizing.columnId);
+      if (column) {
+        await supabase
+          .from('database_columns')
+          .update({ width: column.width })
+          .eq('id', resizing.columnId);
+      }
+    }
+    // Note: title width is not persisted (you could add a page setting for this)
+
+    setResizing(null);
+  }, [resizing, columns]);
+
+  // Attach global mouse events for resize
+  useEffect(() => {
+    if (resizing) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeEnd);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeEnd);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [resizing, handleResizeMove, handleResizeEnd]);
 
   const handleStartEditRowTitle = (row: PageWithProperties) => {
     setEditingRowTitle(row.id);
@@ -260,20 +672,75 @@ export function DatabasePage({ page }: DatabasePageProps) {
         <div className={styles.loading}>Loading...</div>
       ) : (
         <>
+          <TableControls
+            onAddSort={handleSortButtonClick}
+            onAddFilter={handleFilterButtonClick}
+            hasSorts={sorts.length > 0}
+            hasFilters={filters.length > 0}
+          />
+          <PillsRow
+            sorts={sorts}
+            filters={filters}
+            columns={sortableColumns}
+            onOpenSortPopup={handleOpenSortPopup}
+            onRemoveAllSorts={handleDeleteAllSorts}
+            onRemoveFilter={handleRemoveFilter}
+            onOpenFilterPopup={handleOpenFilterPopup}
+            onAddFilter={handleFilterButtonClick}
+            autoOpenSortPopup={autoOpenSortPopup}
+            autoOpenFilterId={autoOpenFilterId}
+            sortPillVisible={sortPillVisible}
+          />
           <div className={styles.tableWrapper}>
+            <div className={styles.tableInner}>
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th className={styles.titleColumn}>Title</th>
-                  {columns.filter(c => c.name !== 'Title').map((column) => (
-                    <th key={column.id}>{column.name}</th>
-                  ))}
+                  <th className={styles.titleColumn} style={{ width: titleWidth }}>
+                    Title
+                    <div
+                      className={`${styles.resizeHandle} ${resizing?.columnId === 'title' ? styles.resizing : ''}`}
+                      onMouseDown={(e) => handleResizeStart(e, 'title', titleWidth)}
+                    />
+                  </th>
+                  {columns.filter(c => c.name !== 'Title').map((column) => {
+                    const width = getColumnWidth(column);
+                    return (
+                      <th
+                        key={column.id}
+                        data-column-id={column.id}
+                        className={styles.columnHeader}
+                        style={{ width }}
+                        onClick={(e) => {
+                          // Don't open settings if clicking on resize handle
+                          if ((e.target as HTMLElement).classList.contains(styles.resizeHandle)) return;
+                          handleOpenColumnSettings(column, e.currentTarget);
+                        }}
+                      >
+                        {column.name}
+                        <div
+                          className={`${styles.resizeHandle} ${resizing?.columnId === column.id ? styles.resizing : ''}`}
+                          onMouseDown={(e) => handleResizeStart(e, column.id, width)}
+                        />
+                      </th>
+                    );
+                  })}
+                  <th className={styles.addColumnHeader}>
+                    <button
+                      ref={addColumnBtnRef}
+                      className={styles.addColumnBtn}
+                      onClick={handleAddColumnClick}
+                    >
+                      +
+                    </button>
+                  </th>
+                  <th className={styles.spacerColumn}></th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {processedRows.map((row) => (
                   <tr key={row.id}>
-                    <td className={styles.titleCell}>
+                    <td className={styles.titleCell} style={{ width: titleWidth }}>
                       <div className={styles.titleWrapper}>
                         <span className={styles.rowIcon}>
                           <PageIcon icon={row.icon || 'lucide:file-text:default'} size={14} />
@@ -306,38 +773,102 @@ export function DatabasePage({ page }: DatabasePageProps) {
                     </td>
                     {columns.filter(c => c.name !== 'Title').map((column) => {
                       const isEditing = editingProperty?.rowId === row.id && editingProperty?.columnId === column.id;
+                      const propertyValue = getPropertyValue(row, column.id);
+                      const columnType = column.property_type;
+                      const isImmediate = isImmediateSaveType(columnType);
+                      const width = getColumnWidth(column);
+
                       return (
-                        <td key={column.id}>
-                          {isEditing ? (
-                            <input
-                              type="text"
+                        <td key={column.id} style={{ width }}>
+                          {isImmediate ? (
+                            // Immediate save types: always show input
+                            <PropertyInput
+                              type={columnType}
+                              value={propertyValue}
+                              options={column.options}
+                              onChange={(value) => handleImmediateSave(row.id, column.id, value)}
+                            />
+                          ) : isEditing ? (
+                            // Text-like types: show input only when editing
+                            <PropertyInput
+                              type={columnType}
                               value={editPropertyValue}
-                              onChange={(e) => setEditPropertyValue(e.target.value)}
+                              options={column.options}
+                              onChange={setEditPropertyValue}
                               onBlur={handleSaveProperty}
-                              onKeyDown={handlePropertyKeyDown}
-                              className={styles.cellInput}
                               autoFocus
                             />
                           ) : (
-                            <span
-                              className={styles.cellText}
+                            // Read mode for text-like types
+                            <PropertyValue
+                              type={columnType}
+                              value={propertyValue}
+                              options={column.options}
                               onClick={() => handleStartEditProperty(row.id, column.id)}
-                            >
-                              {getPropertyValue(row, column.id) || '—'}
-                            </span>
+                            />
                           )}
                         </td>
                       );
                     })}
+                    <td></td>
+                    <td className={styles.spacerColumn}></td>
                   </tr>
                 ))}
+                <tr>
+                  <td className={styles.addRowCell} colSpan={columns.filter(c => c.name !== 'Title').length + 3}>
+                    <button onClick={handleAddRow} className={styles.addRowBtn}>
+                      + New page
+                    </button>
+                  </td>
+                </tr>
               </tbody>
             </table>
+            </div>
           </div>
-          <button onClick={handleAddRow} className={styles.addRowBtn}>
-            + New row
-          </button>
         </>
+      )}
+
+      <AnimatePresence>
+        {addColumnAnchor && (
+          <AddColumnPopover
+            anchorRect={addColumnAnchor}
+            onSelect={handleCreateColumn}
+            onClose={() => setAddColumnAnchor(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {settingsColumn && (
+          <ColumnSettingsPopup
+            column={settingsColumn.column}
+            anchorRect={settingsColumn.rect}
+            onSave={(name) => handleSaveColumnName(settingsColumn.column.id, name)}
+            onDelete={() => handleDeleteColumn(settingsColumn.column.id)}
+            onClose={() => setSettingsColumn(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {sortPopupAnchor && (
+        <SortPopup
+          anchorRect={sortPopupAnchor}
+          columns={sortableColumns}
+          sorts={sorts}
+          onUpdate={setSorts}
+          onClose={() => setSortPopupAnchor(null)}
+          onDeleteAll={handleDeleteAllSorts}
+        />
+      )}
+
+      {editingFilter && (
+        <FilterPopup
+          anchorRect={editingFilter.rect}
+          columns={sortableColumns}
+          filter={editingFilter.filter}
+          onSave={handleSaveFilter}
+          onClose={() => setEditingFilter(null)}
+        />
       )}
     </div>
   );

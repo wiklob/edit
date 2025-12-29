@@ -84,6 +84,15 @@ export interface WorkspaceWithRole extends Workspace {
 export type PageType = 'database' | 'text';
 export type DatabaseType = 'articles';
 
+// Column types
+export type ColumnType = 'text' | 'number' | 'checkbox' | 'date' | 'url' | 'select' | 'multi_select';
+
+export interface SelectOption {
+  id: string;
+  label: string;
+  color?: string;
+}
+
 export interface Page {
   id: string;
   section_id: string;
@@ -102,7 +111,9 @@ export interface DatabaseColumn {
   id: string;
   page_id: string;
   name: string;
-  property_type: string;
+  property_type: ColumnType;
+  options?: SelectOption[] | null;
+  width?: number | null;
   display_order: number;
   created_at: string;
 }
