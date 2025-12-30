@@ -9,8 +9,12 @@ import {
   PillsRow,
   SortPopup,
   FilterPopup,
+  AddViewPopup,
   type SortLevel,
   type Filter,
+  type DatabaseView,
+  type ViewType,
+  getViewLabel,
 } from '../components/database';
 import { supabase, useBreadcrumbs, useSidebar } from '../lib';
 import type { Page, DatabaseColumn, PageWithProperties, ColumnType } from '../types';
@@ -56,6 +60,11 @@ export function DatabasePage({ page }: DatabasePageProps) {
   const [sortPillVisible, setSortPillVisible] = useState(false);
   const [editingFilter, setEditingFilter] = useState<{ filter: Filter; rect: DOMRect } | null>(null);
   const [autoOpenFilterId, setAutoOpenFilterId] = useState<string | null>(null);
+  const [views, setViews] = useState<DatabaseView[]>([
+    { id: 'default', name: 'Table', type: 'table' },
+  ]);
+  const [activeViewId, setActiveViewId] = useState('default');
+  const [addViewPopupAnchor, setAddViewPopupAnchor] = useState<DOMRect | null>(null);
   const addColumnBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -239,6 +248,26 @@ export function DatabasePage({ page }: DatabasePageProps) {
 
   const handleRemoveFilter = (filterId: string) => {
     setFilters(filters.filter(f => f.id !== filterId));
+  };
+
+  // View handlers
+  const handleSelectView = (viewId: string) => {
+    setActiveViewId(viewId);
+  };
+
+  const handleAddViewClick = (rect: DOMRect) => {
+    setAddViewPopupAnchor(rect);
+  };
+
+  const handleAddView = (type: ViewType) => {
+    const newView: DatabaseView = {
+      id: crypto.randomUUID(),
+      name: getViewLabel(type),
+      type,
+    };
+    setViews([...views, newView]);
+    setActiveViewId(newView.id);
+    setAddViewPopupAnchor(null);
   };
 
   const handleStartEditTitle = () => {
@@ -673,6 +702,10 @@ export function DatabasePage({ page }: DatabasePageProps) {
       ) : (
         <>
           <TableControls
+            views={views}
+            activeViewId={activeViewId}
+            onSelectView={handleSelectView}
+            onAddView={handleAddViewClick}
             onAddSort={handleSortButtonClick}
             onAddFilter={handleFilterButtonClick}
             hasSorts={sorts.length > 0}
@@ -868,6 +901,14 @@ export function DatabasePage({ page }: DatabasePageProps) {
           filter={editingFilter.filter}
           onSave={handleSaveFilter}
           onClose={() => setEditingFilter(null)}
+        />
+      )}
+
+      {addViewPopupAnchor && (
+        <AddViewPopup
+          anchorRect={addViewPopupAnchor}
+          onSelect={handleAddView}
+          onClose={() => setAddViewPopupAnchor(null)}
         />
       )}
     </div>

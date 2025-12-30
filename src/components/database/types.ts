@@ -1,3 +1,27 @@
+// View types
+export type ViewType = 'table' | 'board' | 'gallery' | 'list';
+
+export interface DatabaseView {
+  id: string;
+  name: string;
+  type: ViewType;
+}
+
+export const VIEW_OPTIONS: { type: ViewType; label: string; icon: string }[] = [
+  { type: 'table', label: 'Table', icon: '⊞' },
+  { type: 'board', label: 'Board', icon: '▥' },
+  { type: 'gallery', label: 'Gallery', icon: '⊟' },
+  { type: 'list', label: 'List', icon: '☰' },
+];
+
+export function getViewLabel(type: ViewType): string {
+  return VIEW_OPTIONS.find(v => v.type === type)?.label || type;
+}
+
+export function getViewIcon(type: ViewType): string {
+  return VIEW_OPTIONS.find(v => v.type === type)?.icon || '⊞';
+}
+
 export interface SortLevel {
   id: string;
   columnId: string;

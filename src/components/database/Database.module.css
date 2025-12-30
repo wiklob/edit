@@ -1,11 +1,136 @@
+/* View Tabs */
+.viewTabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.viewTab {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 4px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.viewTab:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+.viewTabActive {
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.viewTabIcon {
+  font-size: var(--font-size-md);
+  opacity: 0.7;
+}
+
+.viewTabActive .viewTabIcon {
+  opacity: 1;
+}
+
+.viewTabName {
+  white-space: nowrap;
+}
+
+.addViewBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 2px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-md);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.addViewBtn:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+/* Add View Popup */
+.addViewPopup {
+  z-index: 1001;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--spacing-sm);
+  min-width: 280px;
+}
+
+.addViewHeader {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+.addViewOptions {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+}
+
+.addViewOption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  flex: 1;
+}
+
+.addViewOption:hover {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-text-tertiary);
+}
+
+.addViewOptionIcon {
+  font-size: 24px;
+  color: var(--color-text-secondary);
+}
+
+.addViewOptionLabel {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
 /* Table Controls Bar */
 .controlsBar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: var(--spacing-xs);
   margin-bottom: var(--spacing-sm);
   width: calc(100% - 100px);
+}
+
+.controlsRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 .controlBtn {
