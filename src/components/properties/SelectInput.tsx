@@ -1,12 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useRef } from 'react';
 import type { SelectOption } from '../../types';
 import styles from './Properties.module.css';
 
 interface SelectInputProps {
   value: string;
   options: SelectOption[];
-  onChange: (value: string) => void;
-  onBlur?: () => void;
+  onClick: (element: HTMLElement) => void;
 }
 
 function isLightColor(hex: string): boolean {
@@ -18,34 +17,19 @@ function isLightColor(hex: string): boolean {
   return luminance > 0.5;
 }
 
-export function SelectInput({ value, options, onChange, onBlur }: SelectInputProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function SelectInput({ value, options, onClick }: SelectInputProps) {
   const ref = useRef<HTMLDivElement>(null);
-
   const selectedOption = options.find((o) => o.id === value);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        onBlur?.();
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+  const handleClick = () => {
+    if (ref.current) {
+      onClick(ref.current);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, onBlur]);
-
-  const handleSelect = (optionId: string) => {
-    onChange(optionId);
-    setIsOpen(false);
-    onBlur?.();
   };
 
   return (
     <div className={styles.select} ref={ref}>
-      <div className={styles.selectTrigger} onClick={() => setIsOpen(!isOpen)}>
+      <div className={styles.selectTrigger} onClick={handleClick}>
         {selectedOption ? (
           <span
             className={`${styles.optionTag} ${selectedOption.color && isLightColor(selectedOption.color) ? styles.optionTagLight : ''}`}
@@ -54,35 +38,9 @@ export function SelectInput({ value, options, onChange, onBlur }: SelectInputPro
             {selectedOption.label}
           </span>
         ) : (
-          <span>&nbsp;</span>
+          <span className={styles.selectPlaceholder}></span>
         )}
       </div>
-      {isOpen && (
-        <div className={styles.selectDropdown}>
-          {options.map((option) => (
-            <div
-              key={option.id}
-              className={`${styles.selectOption} ${option.id === value ? styles.selectOptionSelected : ''}`}
-              onClick={() => handleSelect(option.id)}
-            >
-              <span
-                className={`${styles.optionTag} ${option.color && isLightColor(option.color) ? styles.optionTagLight : ''}`}
-                style={{ backgroundColor: option.color || '#6b7280' }}
-              >
-                {option.label}
-              </span>
-            </div>
-          ))}
-          {value && (
-            <div
-              className={styles.selectOption}
-              onClick={() => handleSelect('')}
-            >
-              <span style={{ color: 'var(--color-text-tertiary)' }}>Clear</span>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ interface PropertyInputProps {
   value: string;
   options?: SelectOption[] | null;
   onChange: (value: string) => void;
+  onSelectClick?: (element: HTMLElement) => void;
   onBlur?: () => void;
   autoFocus?: boolean;
   placeholder?: string;
@@ -22,6 +23,7 @@ export function PropertyInput({
   value,
   options,
   onChange,
+  onSelectClick,
   onBlur,
   autoFocus,
   placeholder,
@@ -67,8 +69,7 @@ export function PropertyInput({
         <SelectInput
           value={value}
           options={options || []}
-          onChange={onChange}
-          onBlur={onBlur}
+          onClick={onSelectClick || (() => {})}
         />
       );
 

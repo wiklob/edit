@@ -6,5 +6,8 @@ export { FilterPill } from './FilterPill';
 export { PillsRow } from './PillsRow';
 export { ViewTabs } from './ViewTabs';
 export { AddViewPopup } from './AddViewPopup';
+export { ListView } from './ListView';
+export { GalleryView } from './GalleryView';
+export { BoardView } from './BoardView';
 export type { SortLevel, Filter, FilterOperator, ViewType, DatabaseView } from './types';
 export { FILTER_OPERATORS, getOperatorLabel, operatorNeedsValue, VIEW_OPTIONS, getViewLabel, getViewIcon } from './types';

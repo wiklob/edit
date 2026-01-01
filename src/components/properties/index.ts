@@ -6,4 +6,5 @@ export { CheckboxInput } from './CheckboxInput';
 export { DateInput } from './DateInput';
 export { UrlInput } from './UrlInput';
 export { SelectInput } from './SelectInput';
+export { SelectPopup } from './SelectPopup';
 export { MultiSelectInput } from './MultiSelectInput';

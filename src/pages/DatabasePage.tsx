@@ -3,13 +3,16 @@ import { Link, useParams } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { IconPicker, PageIcon } from '../components/common';
 import { AddColumnPopover, ColumnSettingsPopup } from '../components/modals';
-import { PropertyInput, PropertyValue } from '../components/properties';
+import { PropertyInput, PropertyValue, SelectPopup } from '../components/properties';
 import {
   TableControls,
   PillsRow,
   SortPopup,
   FilterPopup,
   AddViewPopup,
+  ListView,
+  GalleryView,
+  BoardView,
   type SortLevel,
   type Filter,
   type DatabaseView,
@@ -65,6 +68,11 @@ export function DatabasePage({ page }: DatabasePageProps) {
   ]);
   const [activeViewId, setActiveViewId] = useState('default');
   const [addViewPopupAnchor, setAddViewPopupAnchor] = useState<DOMRect | null>(null);
+  const [selectPopup, setSelectPopup] = useState<{
+    rowId: string;
+    columnId: string;
+    anchorElement: HTMLElement;
+  } | null>(null);
   const addColumnBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -251,6 +259,10 @@ export function DatabasePage({ page }: DatabasePageProps) {
   };
 
   // View handlers
+  const activeView = useMemo(() => {
+    return views.find(v => v.id === activeViewId) || views[0];
+  }, [views, activeViewId]);
+
   const handleSelectView = (viewId: string) => {
     setActiveViewId(viewId);
   };
@@ -268,6 +280,41 @@ export function DatabasePage({ page }: DatabasePageProps) {
     setViews([...views, newView]);
     setActiveViewId(newView.id);
     setAddViewPopupAnchor(null);
+  };
+
+  // Handler for updating row name (used by list/gallery/board views)
+  const handleUpdateRowName = async (rowId: string, newName: string) => {
+    const { error } = await supabase
+      .from('pages')
+      .update({ name: newName })
+      .eq('id', rowId);
+
+    if (!error) {
+      setRows(rows.map(row =>
+        row.id === rowId ? { ...row, name: newName } : row
+      ));
+    }
+  };
+
+  // Handler for updating property (used by board view drag & drop)
+  const handleUpdateProperty = async (rowId: string, columnId: string, value: string) => {
+    const { error } = await supabase
+      .from('page_properties')
+      .update({ value })
+      .eq('page_id', rowId)
+      .eq('column_id', columnId);
+
+    if (!error) {
+      setRows(rows.map(row => {
+        if (row.id !== rowId) return row;
+        return {
+          ...row,
+          properties: row.properties.map(prop =>
+            prop.column_id === columnId ? { ...prop, value } : prop
+          ),
+        };
+      }));
+    }
   };
 
   const handleStartEditTitle = () => {
@@ -437,6 +484,135 @@ export function DatabasePage({ page }: DatabasePageProps) {
 
   const isImmediateSaveType = (type: ColumnType) => {
     return type === 'checkbox' || type === 'select' || type === 'multi_select' || type === 'date';
+  };
+
+  // Select popup handlers
+  const handleOpenSelectPopup = (rowId: string, columnId: string, anchorElement: HTMLElement) => {
+    setSelectPopup({ rowId, columnId, anchorElement });
+  };
+
+  const handleSelectValue = async (value: string) => {
+    if (!selectPopup) return;
+    const { rowId, columnId } = selectPopup;
+    await handleImmediateSave(rowId, columnId, value);
+  };
+
+  // Handler for creating new select options
+  const handleCreateSelectOption = async (columnId: string, newOption: { id: string; label: string; color?: string }) => {
+    const column = columns.find(c => c.id === columnId);
+    if (!column) return;
+
+    const currentOptions = column.options || [];
+    const updatedOptions = [...currentOptions, newOption];
+
+    const { error } = await supabase
+      .from('database_columns')
+      .update({ options: updatedOptions })
+      .eq('id', columnId);
+
+    if (!error) {
+      // Update local columns state
+      setColumns(columns.map(c =>
+        c.id === columnId ? { ...c, options: updatedOptions } : c
+      ));
+      // Update column references in rows
+      setRows(rows.map(row => ({
+        ...row,
+        properties: row.properties.map(prop =>
+          prop.column_id === columnId
+            ? { ...prop, column: { ...prop.column, options: updatedOptions } }
+            : prop
+        ),
+      })));
+    }
+  };
+
+  // Handler for updating select options (rename, change color)
+  const handleUpdateSelectOption = async (columnId: string, updatedOption: { id: string; label: string; color?: string }) => {
+    const column = columns.find(c => c.id === columnId);
+    if (!column) return;
+
+    const currentOptions = column.options || [];
+    const updatedOptions = currentOptions.map(opt =>
+      opt.id === updatedOption.id ? updatedOption : opt
+    );
+
+    const { error } = await supabase
+      .from('database_columns')
+      .update({ options: updatedOptions })
+      .eq('id', columnId);
+
+    if (!error) {
+      setColumns(columns.map(c =>
+        c.id === columnId ? { ...c, options: updatedOptions } : c
+      ));
+      setRows(rows.map(row => ({
+        ...row,
+        properties: row.properties.map(prop =>
+          prop.column_id === columnId
+            ? { ...prop, column: { ...prop.column, options: updatedOptions } }
+            : prop
+        ),
+      })));
+    }
+  };
+
+  // Handler for deleting select options
+  const handleDeleteSelectOption = async (columnId: string, optionId: string) => {
+    const column = columns.find(c => c.id === columnId);
+    if (!column) return;
+
+    const currentOptions = column.options || [];
+    const updatedOptions = currentOptions.filter(opt => opt.id !== optionId);
+
+    const { error } = await supabase
+      .from('database_columns')
+      .update({ options: updatedOptions })
+      .eq('id', columnId);
+
+    if (!error) {
+      setColumns(columns.map(c =>
+        c.id === columnId ? { ...c, options: updatedOptions } : c
+      ));
+      setRows(rows.map(row => ({
+        ...row,
+        properties: row.properties.map(prop =>
+          prop.column_id === columnId
+            ? { ...prop, column: { ...prop.column, options: updatedOptions } }
+            : prop
+        ),
+      })));
+
+      // Clear property values that used this option
+      const rowsWithOption = rows.filter(row =>
+        row.properties.some(p => p.column_id === columnId && p.value === optionId)
+      );
+      for (const row of rowsWithOption) {
+        await handleImmediateSave(row.id, columnId, '');
+      }
+    }
+  };
+
+  // Handler for reordering select options
+  const handleReorderSelectOptions = async (columnId: string, newOptions: { id: string; label: string; color?: string }[]) => {
+    const { error } = await supabase
+      .from('database_columns')
+      .update({ options: newOptions })
+      .eq('id', columnId);
+
+    if (!error) {
+      setColumns(columns.map(c =>
+        c.id === columnId ? { ...c, options: newOptions } : c
+      ));
+      setRows(rows.map(row => ({
+        ...row,
+        properties: row.properties.map(prop =>
+          prop.column_id === columnId
+            ? { ...prop, column: { ...prop.column, options: newOptions } }
+            : prop
+        ),
+      })));
+    }
   };
 
   // Get display name for column type
@@ -724,140 +900,174 @@ export function DatabasePage({ page }: DatabasePageProps) {
             autoOpenFilterId={autoOpenFilterId}
             sortPillVisible={sortPillVisible}
           />
-          <div className={styles.tableWrapper}>
-            <div className={styles.tableInner}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th className={styles.titleColumn} style={{ width: titleWidth }}>
-                    Title
-                    <div
-                      className={`${styles.resizeHandle} ${resizing?.columnId === 'title' ? styles.resizing : ''}`}
-                      onMouseDown={(e) => handleResizeStart(e, 'title', titleWidth)}
-                    />
-                  </th>
-                  {columns.filter(c => c.name !== 'Title').map((column) => {
-                    const width = getColumnWidth(column);
-                    return (
-                      <th
-                        key={column.id}
-                        data-column-id={column.id}
-                        className={styles.columnHeader}
-                        style={{ width }}
-                        onClick={(e) => {
-                          // Don't open settings if clicking on resize handle
-                          if ((e.target as HTMLElement).classList.contains(styles.resizeHandle)) return;
-                          handleOpenColumnSettings(column, e.currentTarget);
-                        }}
-                      >
-                        {column.name}
-                        <div
-                          className={`${styles.resizeHandle} ${resizing?.columnId === column.id ? styles.resizing : ''}`}
-                          onMouseDown={(e) => handleResizeStart(e, column.id, width)}
-                        />
-                      </th>
-                    );
-                  })}
-                  <th className={styles.addColumnHeader}>
-                    <button
-                      ref={addColumnBtnRef}
-                      className={styles.addColumnBtn}
-                      onClick={handleAddColumnClick}
-                    >
-                      +
-                    </button>
-                  </th>
-                  <th className={styles.spacerColumn}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {processedRows.map((row) => (
-                  <tr key={row.id}>
-                    <td className={styles.titleCell} style={{ width: titleWidth }}>
-                      <div className={styles.titleWrapper}>
-                        <span className={styles.rowIcon}>
-                          <PageIcon icon={row.icon || 'lucide:file-text:default'} size={14} />
-                        </span>
-                        {editingRowTitle === row.id ? (
-                          <input
-                            type="text"
-                            value={editRowTitleValue}
-                            onChange={(e) => setEditRowTitleValue(e.target.value)}
-                            onBlur={() => handleSaveRowTitle(row.id)}
-                            onKeyDown={(e) => handleRowTitleKeyDown(e, row.id)}
-                            className={styles.titleInput}
-                            autoFocus
-                          />
-                        ) : (
-                          <span
-                            className={styles.titleText}
-                            onClick={() => handleStartEditRowTitle(row)}
-                          >
-                            {row.name}
-                          </span>
-                        )}
-                        <Link
-                          to={`/section/${sectionId}/page/${row.id}`}
-                          className={styles.openBtn}
-                        >
-                          Open
-                        </Link>
-                      </div>
-                    </td>
+          {activeView.type === 'table' && (
+            <div className={styles.tableWrapper}>
+              <div className={styles.tableInner}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th className={styles.titleColumn} style={{ width: titleWidth }}>
+                      Title
+                      <div
+                        className={`${styles.resizeHandle} ${resizing?.columnId === 'title' ? styles.resizing : ''}`}
+                        onMouseDown={(e) => handleResizeStart(e, 'title', titleWidth)}
+                      />
+                    </th>
                     {columns.filter(c => c.name !== 'Title').map((column) => {
-                      const isEditing = editingProperty?.rowId === row.id && editingProperty?.columnId === column.id;
-                      const propertyValue = getPropertyValue(row, column.id);
-                      const columnType = column.property_type;
-                      const isImmediate = isImmediateSaveType(columnType);
                       const width = getColumnWidth(column);
-
                       return (
-                        <td key={column.id} style={{ width }}>
-                          {isImmediate ? (
-                            // Immediate save types: always show input
-                            <PropertyInput
-                              type={columnType}
-                              value={propertyValue}
-                              options={column.options}
-                              onChange={(value) => handleImmediateSave(row.id, column.id, value)}
-                            />
-                          ) : isEditing ? (
-                            // Text-like types: show input only when editing
-                            <PropertyInput
-                              type={columnType}
-                              value={editPropertyValue}
-                              options={column.options}
-                              onChange={setEditPropertyValue}
-                              onBlur={handleSaveProperty}
+                        <th
+                          key={column.id}
+                          data-column-id={column.id}
+                          className={styles.columnHeader}
+                          style={{ width }}
+                          onClick={(e) => {
+                            // Don't open settings if clicking on resize handle
+                            if ((e.target as HTMLElement).classList.contains(styles.resizeHandle)) return;
+                            handleOpenColumnSettings(column, e.currentTarget);
+                          }}
+                        >
+                          {column.name}
+                          <div
+                            className={`${styles.resizeHandle} ${resizing?.columnId === column.id ? styles.resizing : ''}`}
+                            onMouseDown={(e) => handleResizeStart(e, column.id, width)}
+                          />
+                        </th>
+                      );
+                    })}
+                    <th className={styles.addColumnHeader}>
+                      <button
+                        ref={addColumnBtnRef}
+                        className={styles.addColumnBtn}
+                        onClick={handleAddColumnClick}
+                      >
+                        +
+                      </button>
+                    </th>
+                    <th className={styles.spacerColumn}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {processedRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className={styles.titleCell} style={{ width: titleWidth }}>
+                        <div className={styles.titleWrapper}>
+                          <span className={styles.rowIcon}>
+                            <PageIcon icon={row.icon || 'lucide:file-text:default'} size={14} />
+                          </span>
+                          {editingRowTitle === row.id ? (
+                            <input
+                              type="text"
+                              value={editRowTitleValue}
+                              onChange={(e) => setEditRowTitleValue(e.target.value)}
+                              onBlur={() => handleSaveRowTitle(row.id)}
+                              onKeyDown={(e) => handleRowTitleKeyDown(e, row.id)}
+                              className={styles.titleInput}
                               autoFocus
                             />
                           ) : (
-                            // Read mode for text-like types
-                            <PropertyValue
-                              type={columnType}
-                              value={propertyValue}
-                              options={column.options}
-                              onClick={() => handleStartEditProperty(row.id, column.id)}
-                            />
+                            <span
+                              className={styles.titleText}
+                              onClick={() => handleStartEditRowTitle(row)}
+                            >
+                              {row.name}
+                            </span>
                           )}
-                        </td>
-                      );
-                    })}
-                    <td></td>
-                    <td className={styles.spacerColumn}></td>
+                          <Link
+                            to={`/section/${sectionId}/page/${row.id}`}
+                            className={styles.openBtn}
+                          >
+                            Open
+                          </Link>
+                        </div>
+                      </td>
+                      {columns.filter(c => c.name !== 'Title').map((column) => {
+                        const isEditing = editingProperty?.rowId === row.id && editingProperty?.columnId === column.id;
+                        const propertyValue = getPropertyValue(row, column.id);
+                        const columnType = column.property_type;
+                        const isImmediate = isImmediateSaveType(columnType);
+                        const width = getColumnWidth(column);
+
+                        return (
+                          <td key={column.id} style={{ width }}>
+                            {isImmediate ? (
+                              // Immediate save types: always show input
+                              <PropertyInput
+                                type={columnType}
+                                value={propertyValue}
+                                options={column.options}
+                                onChange={(value) => handleImmediateSave(row.id, column.id, value)}
+                                onSelectClick={(rect) => handleOpenSelectPopup(row.id, column.id, rect)}
+                              />
+                            ) : isEditing ? (
+                              // Text-like types: show input only when editing
+                              <PropertyInput
+                                type={columnType}
+                                value={editPropertyValue}
+                                options={column.options}
+                                onChange={setEditPropertyValue}
+                                onBlur={handleSaveProperty}
+                                autoFocus
+                              />
+                            ) : (
+                              // Read mode for text-like types
+                              <PropertyValue
+                                type={columnType}
+                                value={propertyValue}
+                                options={column.options}
+                                onClick={() => handleStartEditProperty(row.id, column.id)}
+                              />
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td></td>
+                      <td className={styles.spacerColumn}></td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td className={styles.addRowCell} colSpan={columns.filter(c => c.name !== 'Title').length + 3}>
+                      <button onClick={handleAddRow} className={styles.addRowBtn}>
+                        + New page
+                      </button>
+                    </td>
                   </tr>
-                ))}
-                <tr>
-                  <td className={styles.addRowCell} colSpan={columns.filter(c => c.name !== 'Title').length + 3}>
-                    <button onClick={handleAddRow} className={styles.addRowBtn}>
-                      + New page
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+              </div>
             </div>
-          </div>
+          )}
+
+          {activeView.type === 'list' && (
+            <ListView
+              rows={processedRows}
+              columns={columns}
+              sectionId={sectionId || ''}
+              onAddRow={handleAddRow}
+              onUpdateRowName={handleUpdateRowName}
+            />
+          )}
+
+          {activeView.type === 'gallery' && (
+            <GalleryView
+              rows={processedRows}
+              columns={columns}
+              sectionId={sectionId || ''}
+              onAddRow={handleAddRow}
+              onUpdateRowName={handleUpdateRowName}
+            />
+          )}
+
+          {activeView.type === 'board' && (
+            <BoardView
+              rows={processedRows}
+              columns={columns}
+              sectionId={sectionId || ''}
+              onAddRow={handleAddRow}
+              onUpdateRowName={handleUpdateRowName}
+              onUpdateProperty={handleUpdateProperty}
+            />
+          )}
         </>
       )}
 
@@ -911,6 +1121,25 @@ export function DatabasePage({ page }: DatabasePageProps) {
           onClose={() => setAddViewPopupAnchor(null)}
         />
       )}
+
+      {selectPopup && (() => {
+        const column = columns.find(c => c.id === selectPopup.columnId);
+        const row = rows.find(r => r.id === selectPopup.rowId);
+        const currentValue = row?.properties.find(p => p.column_id === selectPopup.columnId)?.value || '';
+        return (
+          <SelectPopup
+            anchorElement={selectPopup.anchorElement}
+            value={currentValue}
+            options={column?.options || []}
+            onSelect={handleSelectValue}
+            onCreateOption={(opt) => handleCreateSelectOption(selectPopup.columnId, opt)}
+            onUpdateOption={(opt) => handleUpdateSelectOption(selectPopup.columnId, opt)}
+            onDeleteOption={(optId) => handleDeleteSelectOption(selectPopup.columnId, optId)}
+            onReorderOptions={(opts) => handleReorderSelectOptions(selectPopup.columnId, opts)}
+            onClose={() => setSelectPopup(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
